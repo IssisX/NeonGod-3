@@ -1,6 +1,11 @@
 
 export const CONFIG = Object.freeze({
   ENGINE: { TARGET_FPS: 60, FRAME_BUDGET_MS: 16.667, PERF_SAMPLE_INTERVAL: 60 },
+  WORLD: {
+      WIDTH: 4000,
+      HEIGHT: 4000,
+      SAFE_ZONE: 200, // Margin from edge
+  },
   QUALITY: {
     TIERS: {
       HIGH: { particles: 400, gridStep: 2, shadowBlur: 20 },
@@ -18,15 +23,24 @@ export const CONFIG = Object.freeze({
     PICKUPS: { initial: 5, max: 20 },
     DEBRIS: { initial: 20, max: 100 },
   },
-  GRID: { CELL_SIZE: 60, WARP_STRENGTH: 0.0001, SPRING_CONSTANT: 0.02, FORCE_DECAY: 0.92 },
+  // Spectral Wave Grid Constants
+  GRID: { 
+      CELL_SIZE: 80, 
+      WAVE_SPEED: 0.15, // c^2 term
+      DAMPING: 0.96,    // Viscous drag
+      SOURCE_STRENGTH: 5.0,
+      COLOR_SCALE: 2.0
+  },
   BOIDS: {
-    SEPARATION_RADIUS: 40,
-    ALIGNMENT_RADIUS: 80,
-    COHESION_RADIUS: 80,
-    SEPARATION_WEIGHT: 2.5,
-    ALIGNMENT_WEIGHT: 1.0,
+    // Variational Potentials (Energy Gradients)
+    SEPARATION_RADIUS: 60,
+    ALIGNMENT_RADIUS: 120,
+    COHESION_RADIUS: 120,
+    // Weights act as potential scaling factors
+    SEPARATION_WEIGHT: 4.0,
+    ALIGNMENT_WEIGHT: 1.5,
     COHESION_WEIGHT: 0.8,
-    PLAYER_WEIGHT: 2.0, 
+    PLAYER_WEIGHT: 2.5, 
   },
   HULLS: {
       INTERCEPTOR: { name: "Interceptor", weapon: "DEFAULT", hp: 300, speed: 1.1, desc: "Agile striker. Balanced speed and firepower." },
@@ -36,8 +50,8 @@ export const CONFIG = Object.freeze({
   PLAYER: {
     BASE_HP: 500, 
     BASE_SPEED: 0.6, 
-    THRUST: 0.8, // Newtonian Thrust
-    FRICTION: 0.96, // Space drift
+    THRUST: 0.18, 
+    FRICTION: 0.94, 
     ACCELERATION: 0.12,
     DASH: { COOLDOWN: 120, SPEED: 25, INVULN_DURATION: 30 },
     SKILLS: {
@@ -48,10 +62,11 @@ export const CONFIG = Object.freeze({
     INVULN_ON_HIT: 60, 
   },
   WEAPONS: {
-    DEFAULT: { name: "Pulse Rifle", color: "#ffe600", speed: 14, spread: 0.05, dmgMult: 1.0, fireDelay: 1, size: 4, pierce: 0, homing: 0, count: 1, lifetime: 80, recoil: 0.3, knockback: 3 },
-    SHOTGUN: { name: "Scattergun", color: "#ff5500", speed: 11, spread: 0.35, dmgMult: 0.7, fireDelay: 1.2, size: 3, pierce: 1, homing: 0, count: 5, lifetime: 45, recoil: 2.0, knockback: 6 },
-    RAILGUN: { name: "Arc Caster", color: "#00ffff", speed: 45, spread: 0, dmgMult: 0.8, fireDelay: 3.5, size: 12, pierce: 99, homing: 0, count: 1, lifetime: 25, type: 'beam', recoil: 1.0, knockback: 1 },
-    VOID: { name: "Void Ray", color: "#aa00ff", speed: 10, spread: 0.15, dmgMult: 1.4, fireDelay: 1.1, size: 8, pierce: 0, homing: 0.2, count: 1, lifetime: 100, recoil: 0.5, knockback: 8 },
+    // Recoil values reduced by ~80% to decouple firing from movement physics
+    DEFAULT: { name: "Pulse Rifle", color: "#ffe600", speed: 14, spread: 0.05, dmgMult: 1.0, fireDelay: 1, size: 4, pierce: 0, homing: 0, count: 1, lifetime: 80, recoil: 0.002, knockback: 3 },
+    SHOTGUN: { name: "Scattergun", color: "#ff5500", speed: 11, spread: 0.35, dmgMult: 0.7, fireDelay: 1.2, size: 3, pierce: 1, homing: 0, count: 5, lifetime: 45, recoil: 0.05, knockback: 6 },
+    RAILGUN: { name: "Arc Caster", color: "#00ffff", speed: 45, spread: 0, dmgMult: 0.8, fireDelay: 3.5, size: 12, pierce: 99, homing: 0, count: 1, lifetime: 25, type: 'beam', recoil: 0.04, knockback: 1 },
+    VOID: { name: "Void Ray", color: "#aa00ff", speed: 10, spread: 0.15, dmgMult: 1.4, fireDelay: 1.1, size: 8, pierce: 0, homing: 0.2, count: 1, lifetime: 100, recoil: 0.01, knockback: 8 },
   } as Record<string, any>,
   ENEMIES: {
     CHASER: { hp: 15, speed: 1.8, size: 14, color: "#ff0055", xp: 10, score: 100, hpScale: 3.0, speedScale: 0.02, sides: 3, behavior: 'flock', mass: 1.2 },

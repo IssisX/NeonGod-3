@@ -278,10 +278,8 @@ export default function App() {
         s.width = window.innerWidth;
         s.height = window.innerHeight;
         s.pixelRatio = dpr;
-        s.spatialGrid = new SpatialGrid(CONFIG.SPATIAL.CELL_SIZE);
-        s.visualGrid.rebuild(s.width, s.height);
-        // Reset Camera
-        s.camera = { x: s.width/2, y: s.height/2, zoom: 1, targetZoom: 1 };
+        // We do NOT rebuild the grid on resize anymore because the world is fixed size
+        // s.visualGrid.rebuild(s.width, s.height);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -386,8 +384,8 @@ export default function App() {
     s.anomaly = { active: false, type: 'NONE', timer: 0, duration: 0, intensity: 0 };
     s.upgradeStacks.clear();
     
-    resetPlayer(s.player, s.width, s.height, hull);
-    s.camera = { x: s.player.x, y: s.player.y, zoom: 1, targetZoom: 1 }; // Reset camera to player
+    // Reset Player to center of World
+    resetPlayer(s.player, s.worldWidth, s.worldHeight, hull);
     
     s.bullets.forEach(b => s.pools.bullets.release(b));
     s.enemies.forEach(e => s.pools.enemies.release(e));
@@ -396,7 +394,10 @@ export default function App() {
     s.pickups.forEach(p => s.pools.pickups.release(p));
     
     s.bullets = []; s.enemies = []; s.particles = []; s.gems = []; s.pickups = []; s.texts = []; s.shockwaves = []; s.orbitals = [];
-    s.visualGrid.rebuild(s.width, s.height);
+    
+    // Grid isn't rebuilt on start, but we can clear it
+    if(s.visualGrid) s.visualGrid.uCurrent.fill(0);
+    if(s.visualGrid) s.visualGrid.uPrev.fill(0);
     
     // Architect specific setup
     if (hull === 'ARCHITECT') {

@@ -78,6 +78,20 @@ export interface StatusEffect {
     timer: number;
 }
 
+// PROCEDURAL BOSS PARTS
+export interface BossModule {
+    xOffset: number;
+    yOffset: number;
+    type: 'CORE' | 'WING' | 'TURRET' | 'ENGINE' | 'SHIELD' | 'SPIKE';
+    size: number;
+    color: string;
+    rotation: number; // Relative rotation
+    health: number;
+    maxHealth: number;
+    shape: number[]; // Polygon points
+    mirror?: boolean;
+}
+
 export interface Enemy extends Entity {
   id: string;
   hp: number;
@@ -109,6 +123,9 @@ export interface Enemy extends Entity {
   squadId?: string;
   squadRole?: 'protector' | 'flanker' | 'fodder';
   squadOffset?: { angle: number, dist: number };
+  
+  // New Procedural Data
+  modules?: BossModule[];
 }
 
 export interface Particle extends Entity {
@@ -231,8 +248,13 @@ export interface GameState {
   autoMode: boolean;
   frame: number;
   hitStop: number;
-  width: number;
-  height: number;
+  
+  // Dimensions
+  width: number; // Viewport width
+  height: number; // Viewport height
+  worldWidth: number; // Map width
+  worldHeight: number; // Map height
+  
   pixelRatio: number;
   camera: Camera;
   score: number;
