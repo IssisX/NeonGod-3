@@ -21,6 +21,7 @@ export function updateGame(s: GameState, callbacks: GameCallbacks) {
     Systems.Enemies.update(s, callbacks);
     Systems.Combat.update(s, callbacks);
     Systems.Cleanup.update(s);
+    Systems.Camera.update(s);
 
     s.frame++;
     if (s.comboTimer > 0) {

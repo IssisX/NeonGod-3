@@ -64,71 +64,130 @@ function handleEnemyDeath(s: GameState, e: Enemy, callbacks: GameCallbacks, impa
 function calculateAutoPilot(s: GameState) {
     const p = s.player;
     let mx = 0, my = 0, shoot = false, dash = false, ult = false, q = false, e_skill = false;
+    let aimAngle = p.angle;
+
+    const searchRadius = 800; // Look further
+    const nearby = s.spatialGrid.queryRadius(p.x, p.y, searchRadius);
     
-    // Find nearest enemy
-    let nearest = null;
-    let minDist = 10000;
-    for(const e of s.enemies) {
-        if(!e.active) continue;
-        const d = Utils.dist(p.x, p.y, e.x, e.y);
-        if(d < minDist) { minDist = d; nearest = e; }
+    // 1. Analyze Environment
+    let enemies: Enemy[] = [];
+    let bullets: Enemy[] = [];
+    
+    for(const e of nearby) {
+        if (!e.active) continue;
+        if (e.type === 'projectile') bullets.push(e as Enemy);
+        else if (e !== p) enemies.push(e as Enemy);
     }
     
-    // Avoidance (Boids separation from enemies)
-    let sepX = 0, sepY = 0;
-    let count = 0;
-    for(const e of s.enemies) {
-        if(!e.active) continue;
+    // Gems are not usually in spatial grid in this engine impl, check global list
+    // Optimization: Filter global gems for distance
+    const nearbyGems = s.gems.filter(g => g.active && Utils.dist(p.x, p.y, g.x, g.y) < 500);
+
+    // 2. Calculate Influence Vectors
+    
+    // Danger Vector (Repulsion from enemies/bullets)
+    let dangerX = 0, dangerY = 0;
+    let dangerLevel = 0;
+    
+    for (const e of enemies) {
         const d = Utils.dist(p.x, p.y, e.x, e.y);
-        if(d < 150) {
-            sepX += (p.x - e.x) / d;
-            sepY += (p.y - e.y) / d;
-            count++;
+        if (d < 250) {
+            const weight = (250 - d) / 250;
+            dangerX -= (e.x - p.x) * weight;
+            dangerY -= (e.y - p.y) * weight;
+            dangerLevel += weight;
         }
     }
     
-    // Gem collection attraction
-    let gemX = 0, gemY = 0;
-    let gemCount = 0;
-    for(const g of s.gems) {
-        if(!g.active) continue;
-        const d = Utils.dist(p.x, p.y, g.x, g.y);
-        if (d < 300) {
-            gemX += (g.x - p.x);
-            gemY += (g.y - p.y);
-            gemCount++;
+    for (const b of bullets) {
+        const d = Utils.dist(p.x, p.y, b.x, b.y);
+        if (d < 180) { 
+            const weight = (180 - d) / 180;
+            dangerX -= (b.x - p.x) * weight * 3.0; // Bullets are very dangerous
+            dangerY -= (b.y - p.y) * weight * 3.0;
+            dangerLevel += weight * 2.0;
         }
     }
 
-    if (count > 0) {
-        mx = sepX; my = sepY;
-        if (minDist < 80) dash = true;
-        shoot = true;
-    } else if (gemCount > 0) {
-        mx = gemX; my = gemY;
-    } else {
-        // Center bias (World Center)
-        mx = (s.worldWidth/2 - p.x);
-        my = (s.worldHeight/2 - p.y);
+    // Resource Vector (Attraction to gems)
+    let gemX = 0, gemY = 0;
+    let gemWeight = 0;
+    if (dangerLevel < 2.5 && nearbyGems.length > 0) {
+        let closestGem = null;
+        let minDist = Infinity;
+        for (const g of nearbyGems) {
+            const d = Utils.dist(p.x, p.y, g.x, g.y);
+            if (d < minDist) { minDist = d; closestGem = g; }
+        }
+        if (closestGem) {
+            gemX = (closestGem.x - p.x);
+            gemY = (closestGem.y - p.y);
+            gemWeight = 1.5;
+        }
     }
-    
-    // Normalize move
+
+    // Target Vector (Attraction/Kiting)
+    let target = null;
+    let closestDist = Infinity;
+    for (const e of enemies) {
+        const d = Utils.dist(p.x, p.y, e.x, e.y);
+        if (d < closestDist) { closestDist = d; target = e; }
+    }
+
+    // 3. Decision Logic
+    if (dangerLevel > 1.0) {
+        // EVASION MODE
+        mx = dangerX;
+        my = dangerY;
+        if (dangerLevel > 4.0 || bullets.some(b => Utils.dist(p.x, p.y, b.x, b.y) < 80)) {
+            dash = true;
+        }
+    } else {
+        // AGGRESSION / GATHER MODE
+        if (gemWeight > 0 && (!target || closestDist > 300)) {
+            // Prioritize gems if safe-ish
+            mx = gemX;
+            my = gemY;
+        } else if (target) {
+            // Kite or Chase
+            const optimalRange = 250;
+            const dist = closestDist;
+            
+            if (dist > optimalRange) {
+                // Chase
+                mx = target.x - p.x;
+                my = target.y - p.y;
+            } else {
+                // Strafe (Perpendicular) + Backpedal
+                const dx = target.x - p.x;
+                const dy = target.y - p.y;
+                mx = -dy - dx * 0.5;
+                my = dx - dy * 0.5;
+            }
+        } else {
+            // Wander towards center or random
+            mx = (s.worldWidth/2 - p.x) * 0.1 + Math.cos(s.frame * 0.05) * 50;
+            my = (s.worldHeight/2 - p.y) * 0.1 + Math.sin(s.frame * 0.05) * 50;
+        }
+    }
+
+    // Aiming
+    if (target) {
+        aimAngle = Math.atan2(target.y - p.y, target.x - p.x);
+        shoot = true;
+        
+        // Skill usage
+        if (dangerLevel > 3.0 || target.isElite) e_skill = true;
+        if ((target.isElite || target.type.startsWith('boss')) && dangerLevel > 1.0) q = true;
+        if (s.overdrive >= 100 && (dangerLevel > 5.0 || target.type.startsWith('boss'))) ult = true;
+    } else {
+        shoot = false;
+        aimAngle = Math.atan2(my, mx); // Look where moving
+    }
+
+    // Normalize Input
     const len = Math.hypot(mx, my);
     if(len > 0) { mx/=len; my/=len; }
-    
-    // Aim at nearest
-    let aimAngle = 0;
-    if (nearest) {
-        aimAngle = Math.atan2(nearest.y - p.y, nearest.x - p.x);
-        shoot = true;
-    } else {
-        aimAngle = Math.atan2(my, mx);
-    }
-
-    // Logic for skills
-    if (count > 5) e_skill = true;
-    if (minDist < 100 && count > 3) q = true;
-    if (s.enemies.length > 20) ult = true;
 
     return { mx, my, aimAngle, shoot, dash, ult, q, e: e_skill };
 }
@@ -364,6 +423,23 @@ function handlePlayerHit(s: GameState, e: Enemy, callbacks: GameCallbacks) {
 }
 
 export const Systems = {
+    Camera: {
+        update: (s: GameState) => {
+            if (!s.player.active) return;
+            const targetX = s.player.x;
+            const targetY = s.player.y;
+            
+            // Smooth Camera Follow
+            const lerpSpeed = 0.1;
+            s.camera.x += (targetX - s.camera.x) * lerpSpeed;
+            s.camera.y += (targetY - s.camera.y) * lerpSpeed;
+            
+            // Optional: Clamp to world bounds (keep view inside world mostly)
+            // s.camera.x = Utils.clamp(s.camera.x, s.width/2, s.worldWidth - s.width/2);
+            // s.camera.y = Utils.clamp(s.camera.y, s.height/2, s.worldHeight - s.height/2);
+        }
+    },
+
     Wave: {
         update: (s: GameState, callbacks: GameCallbacks) => {
             if (!s.bossActive && s.waveKills >= s.waveQuota) {
