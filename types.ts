@@ -372,3 +372,13 @@ export interface InputState {
 }
 
 export type SoundType = 'shoot' | 'explosion' | 'hit' | 'dash' | 'levelup' | 'gameover' | 'spawn' | 'charge' | 'ultimate' | 'pickup' | 'evolve' | 'chrono' | 'fracture' | 'glitch_start' | 'spark' | 'void_implode';
+
+export interface GameCallbacks {
+    onLevelUp: (options: UpgradeOption[]) => void;
+    onGameOver: (runData: RunData) => void;
+    onBossSpawn: () => void;
+    onWeaponEvolve: (name: string) => void;
+    playSound: (type: SoundType) => void;
+    setAudioIntensity: (val: number) => void;
+    setAudioTempo: (val: number) => void;
+}
