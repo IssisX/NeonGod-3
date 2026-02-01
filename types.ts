@@ -327,6 +327,9 @@ export interface UpgradeOption {
   weight: number;
   maxStack: number;
   currentStack: number;
+  type: 'stat' | 'weapon';
+  weaponId?: string;
+  req?: (p: Player) => boolean;
 }
 
 export interface RunData {

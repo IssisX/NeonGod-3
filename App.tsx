@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameUI } from './components/GameUI';
 import { TouchControls } from './components/TouchControls';
 import { GameState, UIState, UpgradeOption, HullType } from './types';
-import { CONFIG } from './constants';
+import { CONFIG, EVOLUTIONS } from './constants';
 import { createGameState, updateGame, renderGame, createEvolutionEffect, resetPlayer } from './services/engine';
 import { audio } from './services/audio';
 import { StorageService } from './services/storage';
@@ -74,48 +74,41 @@ export default function App() {
     if (!s) return;
     
     const p = s.player;
-    const current = s.upgradeStacks.get(id) || 0;
-    s.upgradeStacks.set(id, current + 1);
     
-    switch (id) {
-        case 'multishot': p.stats.multishot++; break;
-        case 'fireRate': p.stats.fireRateMod += 0.2; break;
-        case 'speed': p.stats.speedMod += 0.15; break;
-        case 'dashCd': p.maxDashCd = Math.max(20, p.maxDashCd - 15); break;
-        case 'magnet': p.stats.magnetRange += 60; break;
-        case 'maxHp': p.maxHp += 50; p.hp = p.maxHp; break;
-        case 'damage': p.stats.damageMod += 0.2; break;
-        case 'pierce': p.stats.pierce++; break;
-        case 'homing': p.stats.homing += 0.15; break;
-        case 'orbital': 
-            p.stats.orbitals++; 
-            s.orbitals.push({ angle: 0, dist: 60 });
-            s.orbitals.forEach((o, i) => o.angle = (Math.PI * 2 / s.orbitals.length) * i);
-            break;
-        case 'elem_fire': p.stats.elemental.fire++; break;
-        case 'elem_ice': p.stats.elemental.ice++; break;
-        case 'elem_volt': p.stats.elemental.volt++; break;
-    }
+    // Check if it's an evolution
+    const evo = EVOLUTIONS.find(e => e.id === id);
     
-    let evolved = false;
-    let newName = '';
-    let newColor = '#ffffff';
-
-    if (p.stats.multishot >= 4 && p.weapon !== 'SHOTGUN') { 
-        p.weapon = 'SHOTGUN'; evolved = true; newName = 'Scattergun'; newColor = CONFIG.WEAPONS.SHOTGUN.color;
-    }
-    else if (p.stats.pierce >= 2 && p.weapon !== 'RAILGUN') { 
-        p.weapon = 'RAILGUN'; evolved = true; newName = 'Rail Driver'; newColor = CONFIG.WEAPONS.RAILGUN.color;
-    }
-    else if (p.stats.homing >= 0.5 && p.weapon !== 'VOID') { 
-        p.weapon = 'VOID'; evolved = true; newName = 'Void Ray'; newColor = CONFIG.WEAPONS.VOID.color;
-    }
-    
-    if (evolved) {
-        setUI(prev => ({ ...prev, weaponName: newName }));
-        audio.play('evolve');
-        createEvolutionEffect(s, p.x, p.y, newColor);
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+    if (evo) {
+        if (evo.weaponId) {
+            p.weapon = evo.weaponId as any;
+            setUI(prev => ({ ...prev, weaponName: CONFIG.WEAPONS[p.weapon].name }));
+            audio.play('evolve');
+            createEvolutionEffect(s, p.x, p.y, CONFIG.WEAPONS[p.weapon].color);
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+        }
+    } else {
+        const current = s.upgradeStacks.get(id) || 0;
+        s.upgradeStacks.set(id, current + 1);
+        
+        switch (id) {
+            case 'multishot': p.stats.multishot++; break;
+            case 'fireRate': p.stats.fireRateMod += 0.2; break;
+            case 'speed': p.stats.speedMod += 0.15; break;
+            case 'dashCd': p.maxDashCd = Math.max(20, p.maxDashCd - 15); break;
+            case 'magnet': p.stats.magnetRange += 60; break;
+            case 'maxHp': p.maxHp += 50; p.hp = p.maxHp; break;
+            case 'damage': p.stats.damageMod += 0.2; break;
+            case 'pierce': p.stats.pierce++; break;
+            case 'homing': p.stats.homing += 0.15; break;
+            case 'orbital': 
+                p.stats.orbitals++; 
+                s.orbitals.push({ angle: 0, dist: 60 });
+                s.orbitals.forEach((o, i) => o.angle = (Math.PI * 2 / s.orbitals.length) * i);
+                break;
+            case 'elem_fire': p.stats.elemental.fire++; break;
+            case 'elem_ice': p.stats.elemental.ice++; break;
+            case 'elem_volt': p.stats.elemental.volt++; break;
+        }
     }
     
     s.paused = false;
@@ -278,8 +271,6 @@ export default function App() {
         s.width = window.innerWidth;
         s.height = window.innerHeight;
         s.pixelRatio = dpr;
-        // We do NOT rebuild the grid on resize anymore because the world is fixed size
-        // s.visualGrid.rebuild(s.width, s.height);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -384,7 +375,6 @@ export default function App() {
     s.anomaly = { active: false, type: 'NONE', timer: 0, duration: 0, intensity: 0 };
     s.upgradeStacks.clear();
     
-    // Reset Player to center of World
     resetPlayer(s.player, s.worldWidth, s.worldHeight, hull);
     
     s.bullets.forEach(b => s.pools.bullets.release(b));
@@ -395,11 +385,9 @@ export default function App() {
     
     s.bullets = []; s.enemies = []; s.particles = []; s.gems = []; s.pickups = []; s.texts = []; s.shockwaves = []; s.orbitals = [];
     
-    // Grid isn't rebuilt on start, but we can clear it
     if(s.visualGrid) s.visualGrid.uCurrent.fill(0);
     if(s.visualGrid) s.visualGrid.uPrev.fill(0);
     
-    // Architect specific setup
     if (hull === 'ARCHITECT') {
         s.orbitals.push({ angle: 0, dist: 60 });
         s.orbitals.push({ angle: Math.PI, dist: 60 });
@@ -424,7 +412,6 @@ export default function App() {
       touchInputRef.current = input;
   };
 
-  // Wire up specific skill actions from touch UI
   const handleSkill = (skill: string) => {
       const s = stateRef.current;
       if (!s) return;

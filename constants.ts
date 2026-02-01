@@ -1,4 +1,6 @@
 
+import { UpgradeOption, Player } from "./types";
+
 export const CONFIG = Object.freeze({
   ENGINE: { TARGET_FPS: 60, FRAME_BUDGET_MS: 16.667, PERF_SAMPLE_INTERVAL: 60 },
   WORLD: {
@@ -115,18 +117,54 @@ export const CONFIG = Object.freeze({
   COLORS: { BACKGROUND: "#050510", PLAYER: "#00f3ff", PLAYER_DASH: "#ffffff", XP_GEM: "#00ffaa", ULTIMATE: "#ff00ff" },
 });
 
-export const UPGRADES = [
-  { id: "multishot", name: "Split Stream", desc: "Adds +1 projectile to your primary fire.", weight: 1.0, maxStack: 6 },
-  { id: "fireRate", name: "Hyper Loader", desc: "Increases fire rate by 20%.", weight: 1.2, maxStack: 5 },
-  { id: "speed", name: "Ion Thrusters", desc: "Increases movement speed by 15%.", weight: 1.0, maxStack: 4 },
-  { id: "dashCd", name: "Phase Engine", desc: "Reduces dash cooldown by 20%.", weight: 0.8, maxStack: 3 },
-  { id: "magnet", name: "Grav-Field", desc: "Increases item pickup range by 50%.", weight: 1.0, maxStack: 4 },
-  { id: "maxHp", name: "Nano-Weave Hull", desc: "Increases Max HP by 50 and fully heals.", weight: 0.8, maxStack: 8 },
-  { id: "damage", name: "Amp Core", desc: "Increases all damage by 20%.", weight: 1.0, maxStack: 10 },
-  { id: "pierce", name: "Tungsten Rounds", desc: "Projectiles pierce +1 additional enemy.", weight: 0.6, maxStack: 5 },
-  { id: "homing", name: "Tracker AI", desc: "Projectiles home in on targets more aggressively.", weight: 0.7, maxStack: 5 },
-  { id: "orbital", name: "Guardian Orb", desc: "Adds a protective orbital that damages enemies.", weight: 0.5, maxStack: 4 },
-  { id: "elem_fire", name: "Plasma Core", desc: "Attacks apply a stacking BURN effect.", weight: 0.6, maxStack: 5 },
-  { id: "elem_ice", name: "Cryo Emitter", desc: "Attacks FREEZE enemies, slowing them.", weight: 0.6, maxStack: 3 },
-  { id: "elem_volt", name: "Voltaic Coil", desc: "Attacks chain LIGHTNING to nearby foes.", weight: 0.5, maxStack: 3 },
+export const UPGRADES: UpgradeOption[] = [
+  { id: "multishot", type: "stat", name: "Split Stream", desc: "Adds +1 projectile to your primary fire.", weight: 1.0, maxStack: 6, currentStack: 0 },
+  { id: "fireRate", type: "stat", name: "Hyper Loader", desc: "Increases fire rate by 20%.", weight: 1.2, maxStack: 5, currentStack: 0 },
+  { id: "speed", type: "stat", name: "Ion Thrusters", desc: "Increases movement speed by 15%.", weight: 1.0, maxStack: 4, currentStack: 0 },
+  { id: "dashCd", type: "stat", name: "Phase Engine", desc: "Reduces dash cooldown by 20%.", weight: 0.8, maxStack: 3, currentStack: 0 },
+  { id: "magnet", type: "stat", name: "Grav-Field", desc: "Increases item pickup range by 50%.", weight: 1.0, maxStack: 4, currentStack: 0 },
+  { id: "maxHp", type: "stat", name: "Nano-Weave Hull", desc: "Increases Max HP by 50 and fully heals.", weight: 0.8, maxStack: 8, currentStack: 0 },
+  { id: "damage", type: "stat", name: "Amp Core", desc: "Increases all damage by 20%.", weight: 1.0, maxStack: 10, currentStack: 0 },
+  { id: "pierce", type: "stat", name: "Tungsten Rounds", desc: "Projectiles pierce +1 additional enemy.", weight: 0.6, maxStack: 5, currentStack: 0 },
+  { id: "homing", type: "stat", name: "Tracker AI", desc: "Projectiles home in on targets more aggressively.", weight: 0.7, maxStack: 5, currentStack: 0 },
+  { id: "orbital", type: "stat", name: "Guardian Orb", desc: "Adds a protective orbital that damages enemies.", weight: 0.5, maxStack: 4, currentStack: 0 },
+  { id: "elem_fire", type: "stat", name: "Plasma Core", desc: "Attacks apply a stacking BURN effect.", weight: 0.6, maxStack: 5, currentStack: 0 },
+  { id: "elem_ice", type: "stat", name: "Cryo Emitter", desc: "Attacks FREEZE enemies, slowing them.", weight: 0.6, maxStack: 3, currentStack: 0 },
+  { id: "elem_volt", type: "stat", name: "Voltaic Coil", desc: "Attacks chain LIGHTNING to nearby foes.", weight: 0.5, maxStack: 3, currentStack: 0 },
+];
+
+export const EVOLUTIONS: UpgradeOption[] = [
+    { 
+        id: "evo_shotgun", 
+        type: "weapon", 
+        name: "EVOLVE: SCATTERGUN", 
+        desc: "Transform weapon into a high-spread, multi-projectile flak cannon.", 
+        weight: 100, 
+        maxStack: 1, 
+        currentStack: 0,
+        weaponId: 'SHOTGUN',
+        req: (p: Player) => p.stats.multishot >= 3 && p.weapon !== 'SHOTGUN' && p.weapon !== 'RAILGUN' && p.weapon !== 'VOID'
+    },
+    { 
+        id: "evo_railgun", 
+        type: "weapon", 
+        name: "EVOLVE: RAIL DRIVER", 
+        desc: "Transform weapon into a high-velocity piercing beam emitter.", 
+        weight: 100, 
+        maxStack: 1, 
+        currentStack: 0,
+        weaponId: 'RAILGUN',
+        req: (p: Player) => p.stats.pierce >= 2 && p.weapon !== 'SHOTGUN' && p.weapon !== 'RAILGUN' && p.weapon !== 'VOID'
+    },
+    { 
+        id: "evo_void", 
+        type: "weapon", 
+        name: "EVOLVE: VOID RAY", 
+        desc: "Transform weapon into a corrupting energy stream.", 
+        weight: 100, 
+        maxStack: 1, 
+        currentStack: 0,
+        weaponId: 'VOID',
+        req: (p: Player) => p.stats.homing >= 0.4 && p.weapon !== 'SHOTGUN' && p.weapon !== 'RAILGUN' && p.weapon !== 'VOID'
+    }
 ];

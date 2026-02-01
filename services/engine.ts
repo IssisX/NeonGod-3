@@ -1,6 +1,6 @@
 
 import { GameState, Player, HullType, GameCallbacks, UpgradeOption } from '../types';
-import { CONFIG, UPGRADES } from '../constants';
+import { CONFIG, UPGRADES, EVOLUTIONS } from '../constants';
 import { SpatialGrid, VisualGrid } from './grids';
 import { Factories, ObjectPool } from './pools';
 import { Systems } from './systems';
@@ -64,6 +64,14 @@ export function updateGame(s: GameState, callbacks: GameCallbacks) {
         s.player.xpToNext = Math.floor(s.player.xpToNext * CONFIG.PROGRESSION.XP_SCALE);
         
         const options: UpgradeOption[] = [];
+        
+        // Check for evolutions first
+        const availableEvolutions = EVOLUTIONS.filter(evo => evo.req && evo.req(s.player));
+        if (availableEvolutions.length > 0) {
+            // Always include one evolution if available
+            options.push({ ...availableEvolutions[0], currentStack: 0 });
+        }
+
         const pool = [...UPGRADES]; 
         
         const valid = pool.filter(u => {
@@ -71,7 +79,8 @@ export function updateGame(s: GameState, callbacks: GameCallbacks) {
             return current < u.maxStack;
         });
         
-        for(let i=0; i<3; i++) {
+        // Fill remaining slots
+        while (options.length < 3) {
             if (valid.length === 0) break;
             const totalWeight = valid.reduce((acc, u) => acc + u.weight, 0);
             let r = Math.random() * totalWeight;
