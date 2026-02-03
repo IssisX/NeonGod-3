@@ -5,36 +5,77 @@ import { CONFIG } from '../constants';
 export class SpatialGrid {
   cellSize: number;
   cellSizeInv: number;
-  cells: Map<string, Entity[]>;
+  cols: number;
+  rows: number;
+  cells: Entity[][]; // Flat array of buckets
   results: Entity[];
 
   constructor(cellSize = 128) {
     this.cellSize = cellSize;
     this.cellSizeInv = 1 / cellSize;
-    this.cells = new Map();
+
+    // Calculate grid dimensions based on World Size (plus padding for safety)
+    this.cols = Math.ceil(CONFIG.WORLD.WIDTH * this.cellSizeInv) + 2;
+    this.rows = Math.ceil(CONFIG.WORLD.HEIGHT * this.cellSizeInv) + 2;
+
+    // Pre-allocate buckets
+    const size = this.cols * this.rows;
+    this.cells = new Array(size);
+    for(let i = 0; i < size; i++) {
+        this.cells[i] = [];
+    }
+
     this.results = [];
   }
   
-  clear() { this.cells.clear(); }
+  clear() {
+    // Fast clear without GC
+    const len = this.cells.length;
+    for(let i = 0; i < len; i++) {
+        this.cells[i].length = 0;
+    }
+  }
   
   insert(entity: Entity) {
-    const key = `${Math.floor(entity.x * this.cellSizeInv)},${Math.floor(entity.y * this.cellSizeInv)}`;
-    let cell = this.cells.get(key);
-    if (!cell) { cell = []; this.cells.set(key, cell); }
-    cell.push(entity);
+    // Fast integer hashing
+    // Clamp to grid bounds to handle out-of-bounds entities
+    let cx = Math.floor(entity.x * this.cellSizeInv);
+    let cy = Math.floor(entity.y * this.cellSizeInv);
+
+    // Bounds check
+    if (cx < 0) cx = 0; else if (cx >= this.cols) cx = this.cols - 1;
+    if (cy < 0) cy = 0; else if (cy >= this.rows) cy = this.rows - 1;
+
+    const idx = cy * this.cols + cx;
+    this.cells[idx].push(entity);
   }
   
   queryRadius(x: number, y: number, radius: number) {
     this.results.length = 0;
-    const minCx = Math.floor((x - radius) * this.cellSizeInv);
-    const maxCx = Math.floor((x + radius) * this.cellSizeInv);
-    const minCy = Math.floor((y - radius) * this.cellSizeInv);
-    const maxCy = Math.floor((y + radius) * this.cellSizeInv);
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      for (let cy = minCy; cy <= maxCy; cy++) {
-        const cell = this.cells.get(`${cx},${cy}`);
-        if (cell) for (let i = 0; i < cell.length; i++) this.results.push(cell[i]);
-      }
+
+    // Calculate bounds in grid coordinates
+    let minCx = Math.floor((x - radius) * this.cellSizeInv);
+    let maxCx = Math.floor((x + radius) * this.cellSizeInv);
+    let minCy = Math.floor((y - radius) * this.cellSizeInv);
+    let maxCy = Math.floor((y + radius) * this.cellSizeInv);
+
+    // Clamp bounds
+    if (minCx < 0) minCx = 0;
+    if (maxCx >= this.cols) maxCx = this.cols - 1;
+    if (minCy < 0) minCy = 0;
+    if (maxCy >= this.rows) maxCy = this.rows - 1;
+
+    for (let cy = minCy; cy <= maxCy; cy++) {
+        // Optimization: Pre-calculate row offset
+        const rowOffset = cy * this.cols;
+        for (let cx = minCx; cx <= maxCx; cx++) {
+            const cell = this.cells[rowOffset + cx];
+            const len = cell.length;
+            // Unroll loop slightly? V8 handles simple loops well.
+            for (let i = 0; i < len; i++) {
+                this.results.push(cell[i]);
+            }
+        }
     }
     return this.results;
   }

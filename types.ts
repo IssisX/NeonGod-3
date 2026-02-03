@@ -130,6 +130,11 @@ export interface Enemy extends Entity {
   squadOffset?: { angle: number, dist: number };
   behavior?: string;
   
+  // AI Memory
+  targetX?: number;
+  targetY?: number;
+  brain?: any;
+
   // New Procedural Data
   modules?: BossModule[];
 }

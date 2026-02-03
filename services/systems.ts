@@ -1,9 +1,10 @@
 
-
 import { GameState, Enemy, GameCallbacks, BossModule, Player } from '../types';
 import { CONFIG } from '../constants';
 import { Utils } from '../utils';
 import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawnBoss, createAsteroid, createShipDebris, createSparks } from './generators';
+import { PhysicsSystem } from './physics';
+import { AIFactory, Brain } from './ai';
 
 // --- MATH HELPERS ---
 
@@ -184,100 +185,11 @@ function calculateAutoPilot(s: GameState) {
 
 // 3. SQUAD TACTICS IMPLEMENTATION
 function updateSquadTactics(s: GameState) {
-    const elites = s.enemies.filter(e => e.active && !e.dead && e.isElite && !e.type.startsWith('boss'));
-    const unassigned = s.enemies.filter(e => e.active && !e.dead && !e.isElite && !e.squadId && e.type !== 'projectile');
-
-    for (const grunt of unassigned) {
-        let nearest = null;
-        let minD = 400; 
-        for (const leader of elites) {
-            const d = Utils.dist(grunt.x, grunt.y, leader.x, leader.y);
-            if (d < minD) { minD = d; nearest = leader; }
-        }
-
-        if (nearest) {
-            grunt.squadId = nearest.id;
-            grunt.squadRole = Math.random() > 0.5 ? 'flanker' : 'protector';
-            grunt.squadOffset = { 
-                angle: Math.random() * Math.PI * 2, 
-                dist: 60 + Math.random() * 80 
-            };
-        }
-    }
+    // ... Deprecated by Utility AI
 }
 
-function applyVariationalBoids(e: Enemy, s: GameState): {x: number, y: number} {
-    const p = s.player;
-    let fx = 0, fy = 0;
-    
-    let targetX = p.x;
-    let targetY = p.y;
-    
-    if (e.squadId) {
-        const leader = s.enemies.find(l => l.id === e.squadId && l.active);
-        if (leader) {
-            const angle = (e.squadOffset?.angle || 0) + (s.frame * 0.01); 
-            const dist = e.squadOffset?.dist || 50;
-            targetX = leader.x + Math.cos(angle) * dist;
-            targetY = leader.y + Math.sin(angle) * dist;
-            fx += leader.vx * 0.5;
-            fy += leader.vy * 0.5;
-        } else {
-            e.squadId = undefined;
-        }
-    }
-
-    // 1. Separation
-    let sepX = 0, sepY = 0, count = 0;
-    const neighbors = s.spatialGrid.queryRadius(e.x, e.y, CONFIG.BOIDS.SEPARATION_RADIUS);
-    for (const other of neighbors) {
-        if (other === e || other === p) continue;
-        const o = other as Enemy;
-        if (!o.active || o.dead) continue;
-        
-        const dx = e.x - o.x;
-        const dy = e.y - o.y;
-        const dSq = dx*dx + dy*dy;
-        if (dSq > 0.1 && dSq < CONFIG.BOIDS.SEPARATION_RADIUS * CONFIG.BOIDS.SEPARATION_RADIUS) {
-            const d = Math.sqrt(dSq);
-            const force = (CONFIG.BOIDS.SEPARATION_RADIUS - d) / d; 
-            sepX += dx * force;
-            sepY += dy * force;
-            count++;
-        }
-    }
-    if (count > 0) {
-        fx += sepX * CONFIG.BOIDS.SEPARATION_WEIGHT * 2.0;
-        fy += sepY * CONFIG.BOIDS.SEPARATION_WEIGHT * 2.0;
-    }
-    
-    // 2. Attraction
-    const tdx = targetX - e.x;
-    const tdy = targetY - e.y;
-    const dist = Math.hypot(tdx, tdy);
-    if (dist > 0) {
-        let weight = CONFIG.BOIDS.PLAYER_WEIGHT;
-        if (e.behavior === 'keep_distance' && !e.squadId) {
-            const idealDist = 300;
-            if (dist < idealDist) weight = -weight * 1.5; 
-            else if (dist < idealDist + 50) weight = 0; 
-        }
-        fx += (tdx / dist) * weight;
-        fy += (tdy / dist) * weight;
-    }
-    
-    // Arena Constraint for enemies
-    if (s.arena.active) {
-        const distToCenter = Utils.dist(e.x, e.y, s.arena.x, s.arena.y);
-        if (distToCenter > s.arena.radius) {
-            const angle = Math.atan2(s.arena.y - e.y, s.arena.x - e.x);
-            fx += Math.cos(angle) * 10; // Push back in
-            fy += Math.sin(angle) * 10;
-        }
-    }
-    
-    return { x: fx, y: fy };
-}
+// ... Deprecated by Utility AI
+// function applyVariationalBoids
 
 function handleShooting(s: GameState, callbacks: GameCallbacks) {
     const p = s.player;
@@ -444,67 +356,72 @@ function handlePlayerHit(s: GameState, e: Enemy, callbacks: GameCallbacks) {
 const EnemiesSystem = {
     update: (s: GameState, callbacks: GameCallbacks) => {
         const p = s.player;
+        const dt = s.worldTimeScale;
+
         for (let i = s.enemies.length - 1; i >= 0; i--) {
             const e = s.enemies[i];
             if (!e.active || e.dead) continue;
 
-            // Physics
-            e.x += e.vx * s.worldTimeScale;
-            e.y += e.vy * s.worldTimeScale;
-
-            // Friction
-            e.vx *= (e.mass > 10 ? 0.98 : 0.95);
-            e.vy *= (e.mass > 10 ? 0.98 : 0.95);
-
-            // Behavior
+            // UTILITY AI INTEGRATION
             let fx = 0, fy = 0;
-            if (e.behavior && !e.type.startsWith('boss')) {
-                // Use existing helper if applicable
-                if (e.behavior === 'flock' || e.behavior === 'rush' || e.behavior === 'keep_distance' || e.behavior === 'dash_attack' || e.behavior === 'orbit' || e.behavior === 'shield') {
-                    const force = applyVariationalBoids(e, s);
-                    fx = force.x; fy = force.y;
-                } else if (e.behavior === 'tank') {
-                    const ang = Math.atan2(p.y - e.y, p.x - e.x);
-                    fx = Math.cos(ang) * 0.2; fy = Math.sin(ang) * 0.2;
+
+            if (!e.type.startsWith('boss')) {
+                if (!e.brain) {
+                    e.brain = AIFactory.createBrain(e.type);
                 }
-            } else if (e.type.startsWith('boss')) {
-                 // Simple boss tracking
+
+                const result = e.brain.think(s, e);
+                fx = result.fx;
+                fy = result.fy;
+                e.behavior = result.action; // Debug/Vis
+
+                // Arena Constraint for enemies
+                if (s.arena.active) {
+                    const distToCenter = Utils.dist(e.x, e.y, s.arena.x, s.arena.y);
+                    if (distToCenter > s.arena.radius) {
+                        const angle = Math.atan2(s.arena.y - e.y, s.arena.x - e.x);
+                        fx += Math.cos(angle) * 10; // Push back in
+                        fy += Math.sin(angle) * 10;
+                    }
+                }
+            } else {
+                 // Boss Logic (Keep simple tracking for now or migrate to AI too)
                  const ang = Math.atan2(p.y - e.y, p.x - e.x);
-                 fx = Math.cos(ang) * 0.5; fy = Math.sin(ang) * 0.5;
+                 fx = Math.cos(ang) * 0.5 * e.speed;
+                 fy = Math.sin(ang) * 0.5 * e.speed;
             }
 
-            // Snake Body Logic
+            // PHYSICS INTEGRATION (RK4)
+            // Note: force is mass * accel. 'fx' here is desired velocity or force?
+            // The AI returns 'force-like' vectors (scaled by speed).
+            // Let's treat them as acceleration forces.
+
+            const speedMod = e.status.some(st => st.type === 'FREEZE') ? 0.5 : 1.0;
+
+            // Snake Body Logic Override
             if (e.type === 'snake_body' && e.parentId) {
                  const parent = s.enemies.find(par => par.id === e.parentId);
                  if (parent && parent.active) {
                      const dist = Utils.dist(e.x, e.y, parent.x, parent.y);
                      if (dist > e.size) {
                          const ang = Math.atan2(parent.y - e.y, parent.x - e.x);
-                         const speed = Math.hypot(parent.vx, parent.vy); // Follow parent speed
-                         e.x = Utils.lerp(e.x, parent.x - Math.cos(ang) * e.size, 0.2);
-                         e.y = Utils.lerp(e.y, parent.y - Math.sin(ang) * e.size, 0.2);
+                         // Use RK4 to move towards parent
+                         fx = Math.cos(ang) * 10; // Strong pull
+                         fy = Math.sin(ang) * 10;
+                     } else {
                          fx = 0; fy = 0;
                      }
                  } else {
-                     e.hp = 0; e.dead = true; // Cascade death
+                     e.hp = 0; e.dead = true;
                      handleEnemyDeath(s, e, callbacks, {x:0, y:0});
+                     continue;
                  }
             }
 
-            // Apply Force
-            const speedMod = e.status.some(st => st.type === 'FREEZE') ? 0.5 : 1.0;
-            e.vx += fx * 0.1 * s.worldTimeScale * speedMod;
-            e.vy += fy * 0.1 * s.worldTimeScale * speedMod;
-
-            // Max Speed Cap
-            const speed = Math.hypot(e.vx, e.vy);
-            const maxSpeed = e.speed * speedMod;
-            if (speed > maxSpeed) {
-                e.vx = (e.vx / speed) * maxSpeed;
-                e.vy = (e.vy / speed) * maxSpeed;
-            }
+            PhysicsSystem.integrate(e, fx * 0.2, fy * 0.2, dt, 0.95, e.mass);
 
             // Rotation
+            const speed = Math.hypot(e.vx, e.vy);
             if (e.type !== 'snake_body' && !e.type.startsWith('boss') && e.sides > 0) {
                  e.rotation += speed * 0.05 * s.worldTimeScale;
             } else if (speed > 0.1) {
@@ -542,9 +459,8 @@ const EnemiesSystem = {
             // Cleanup Out of Bounds
             if (!Utils.inBounds(e.x, e.y, s.worldWidth, s.worldHeight, 200)) {
                 if (!e.type.startsWith('boss')) {
-                    // Soft wall or wrap? Let's soft wall them back in.
-                    const ang = Math.atan2(s.worldHeight/2 - e.y, s.worldWidth/2 - e.x);
-                    e.vx += Math.cos(ang); e.vy += Math.sin(ang);
+                     const ang = Math.atan2(s.worldHeight/2 - e.y, s.worldWidth/2 - e.x);
+                     e.vx += Math.cos(ang); e.vy += Math.sin(ang);
                 }
             }
         }
@@ -553,7 +469,7 @@ const EnemiesSystem = {
 
 const CleanupSystem = {
     update: (s: GameState) => {
-        // Particles
+        // Particles (Simple Euler is fine for particles, cheap)
         for(let i = s.particles.length - 1; i >= 0; i--) {
             const p = s.particles[i];
             p.life--;
@@ -570,6 +486,7 @@ const CleanupSystem = {
         // Gems
         for(let i = s.gems.length - 1; i >= 0; i--) {
             const g = s.gems[i];
+            // Physics Update for Gems? Maybe too expensive. Keep Euler.
             g.x += g.vx; g.y += g.vy;
             g.vx *= CONFIG.GEMS.FRICTION; g.vy *= CONFIG.GEMS.FRICTION;
             g.life -= s.worldTimeScale;
@@ -591,7 +508,7 @@ const CleanupSystem = {
             d.rotation += d.vRot * s.worldTimeScale;
             d.vRot *= d.friction; // Angular damping
 
-            // Linear Physics
+            // Linear Physics (RK4 candidate but overkill for debris)
             d.x += d.vx * s.worldTimeScale;
             d.y += d.vy * s.worldTimeScale;
             d.vx *= d.friction; 
@@ -796,9 +713,36 @@ export const Systems = {
             const thrust = CONFIG.PLAYER.THRUST * p.stats.speedMod * s.playerTimeScale;
             const len = Math.hypot(mx, my);
             if (len > 1) { mx /= len; my /= len; }
-            p.vx += mx * thrust; p.vy += my * thrust;
-            p.vx *= CONFIG.PLAYER.FRICTION; p.vy *= CONFIG.PLAYER.FRICTION;
-            p.recoilX *= 0.70; p.recoilY *= 0.70; // INCREASED DAMPING (was 0.85) to stop sliding
+
+            // NEW: Physics System Integration for Player
+            // mx, my are direction inputs. Thrust is force.
+            // But PhysicsSystem.integrate takes force.
+            // We need to match existing feel.
+            // Existing: p.vx += mx * thrust; p.vx *= friction.
+            // New: integrate(p, mx * thrust * factor, my * thrust * factor, dt, friction_factor)
+
+            // To match exact feel is hard, but let's approximate.
+            // Euler: v += a; v *= f;
+            // RK4: v += a... with drag.
+
+            // Let's pass force = mx * thrust * 10 (arbitrary scale to match acceleration)
+            // Friction in RK4 is linear drag (1-f).
+            // CONFIG.PLAYER.FRICTION is 0.88 per frame.
+            // RK4 friction is drag coefficient.
+            // If v *= 0.88, then v_new = v * 0.88 = v - v*0.12.
+            // So drag = 0.12. But RK4 takes 'friction' param as 0.95 -> drag 0.05.
+            // So we pass CONFIG.PLAYER.FRICTION directly if integrate uses it as "velocity multiplier per frame".
+
+            // In PhysicsSystem.integrate:
+            // const drag = (1.0 - friction);
+            // return (fx - vx * drag) / mass;
+
+            // So if I pass 0.88, drag is 0.12. This matches "velocity loses 12% per second" roughly?
+            // No, my implementation in PhysicsSystem uses it as per-step.
+
+            PhysicsSystem.integrate(p, mx * thrust * 5.0, my * thrust * 5.0, s.playerTimeScale, CONFIG.PLAYER.FRICTION);
+
+            p.recoilX *= 0.70; p.recoilY *= 0.70;
             p.x += p.recoilX; p.y += p.recoilY;
 
             // Arena Constraint

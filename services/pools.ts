@@ -14,6 +14,7 @@ export const Factories = {
       e.modules = undefined; // CRITICAL FIX: Clear boss modules
       e.state = 'idle'; e.stateTimer = 0;
       e.behavior = undefined;
+      e.brain = undefined;
   },
   
   particle: () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0, color: '', size: 0, friction: 0.92, type: 'spark', active: false, rotation: 0, rv: 0, sides: 3 }),
