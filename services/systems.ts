@@ -210,7 +210,13 @@ function handleShooting(s: GameState, callbacks: GameCallbacks) {
         s.camera.kickY -= Math.sin(p.angle) * (recoilForce * 2);
     }
 
-    callbacks.playSound('shoot');
+    // Dynamic Weapon Sound
+    let soundType: any = 'shoot_default';
+    if (p.weapon === 'SHOTGUN') soundType = 'shoot_shotgun';
+    else if (p.weapon === 'RAILGUN') soundType = 'shoot_railgun';
+    else if (p.weapon === 'VOID') soundType = 'shoot_void';
+
+    callbacks.playSound(soundType);
 
     const totalShots = (weapon.count || 1) + p.stats.multishot;
     const spread = weapon.spread;

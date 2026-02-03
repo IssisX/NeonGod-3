@@ -408,7 +408,7 @@ export interface InputState {
     mouse: { x: number; y: number; down: boolean };
 }
 
-export type SoundType = 'shoot' | 'explosion' | 'hit' | 'dash' | 'levelup' | 'gameover' | 'spawn' | 'charge' | 'ultimate' | 'pickup' | 'evolve' | 'chrono' | 'fracture' | 'glitch_start' | 'spark' | 'void_implode';
+export type SoundType = 'shoot_default' | 'shoot_shotgun' | 'shoot_railgun' | 'shoot_void' | 'explosion' | 'hit' | 'dash' | 'levelup' | 'gameover' | 'spawn' | 'charge' | 'ultimate' | 'pickup' | 'evolve' | 'chrono' | 'fracture' | 'glitch_start' | 'spark' | 'void_implode';
 
 export interface GameCallbacks {
     onLevelUp: (options: UpgradeOption[]) => void;
