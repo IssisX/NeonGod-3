@@ -343,13 +343,14 @@ export interface GameState {
   pools: {
     bullets: any;
     enemies: any;
-    particles: any;
     gems: any;
     pickups: any;
     debris: any; // Added debris pool
   };
   spatialGrid: any;
   visualGrid: any;
+  particleSystem?: any;
+  flowField?: any;
   
   damageDealtBuffer: number;
 }

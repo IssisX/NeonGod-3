@@ -270,12 +270,8 @@ function handleDash(s: GameState, callbacks: GameCallbacks, mx: number, my: numb
     callbacks.playSound('dash');
     
     for(let i=0; i<10; i++) {
-        const pt = s.pools.particles.acquire();
-        if(pt) {
-            pt.x = p.x; pt.y = p.y;
-            pt.vx = -dx * Math.random() * 5; pt.vy = -dy * Math.random() * 5;
-            pt.life = 20; pt.maxLife = 20; pt.color = CONFIG.COLORS.PLAYER_DASH; pt.size = 2; pt.active = true;
-            s.particles.push(pt);
+        if (s.particleSystem) {
+            s.particleSystem.spawn(p.x, p.y, -dx * Math.random() * 5, -dy * Math.random() * 5, 20, 2, CONFIG.COLORS.PLAYER_DASH, 'spark');
         }
     }
 }
@@ -475,14 +471,8 @@ const EnemiesSystem = {
 
 const CleanupSystem = {
     update: (s: GameState) => {
-        // Particles (Simple Euler is fine for particles, cheap)
-        for(let i = s.particles.length - 1; i >= 0; i--) {
-            const p = s.particles[i];
-            p.life--;
-            p.x += p.vx * s.worldTimeScale; p.y += p.vy * s.worldTimeScale;
-            p.vx *= p.friction; p.vy *= p.friction;
-            if (p.life <= 0) { s.pools.particles.release(p); s.particles.splice(i, 1); }
-        }
+        // Particles now handled by s.particleSystem.update() called in engine.ts
+
         // Pickups
         for(let i = s.pickups.length - 1; i >= 0; i--) {
             const p = s.pickups[i];
@@ -776,15 +766,11 @@ export const Systems = {
             p.y = Utils.clamp(p.y + p.vy, 0, s.worldHeight);
             
             if (len > 0.1 && s.visualGrid) s.visualGrid.applyForce(p.x, p.y, 40, len * 5);
-            if (len > 0.1 && s.frame % 2 === 0) {
-                const t = s.pools.particles.acquire();
-                if(t) {
-                    const angle = Math.atan2(my, mx) + Math.PI;
-                    t.x = p.x + Utils.rand(-5, 5); t.y = p.y + Utils.rand(-5, 5);
-                    t.vx = Math.cos(angle) * 4 + (Math.random()-0.5); t.vy = Math.sin(angle) * 4 + (Math.random()-0.5);
-                    t.life = 15; t.maxLife = 15; t.color = CONFIG.COLORS.PLAYER; t.size = Utils.rand(2, 4); t.type = 'spark'; t.active = true;
-                    s.particles.push(t);
-                }
+            if (len > 0.1 && s.frame % 2 === 0 && s.particleSystem) {
+                const angle = Math.atan2(my, mx) + Math.PI;
+                const px = p.x + Utils.rand(-5, 5); const py = p.y + Utils.rand(-5, 5);
+                const pvx = Math.cos(angle) * 4 + (Math.random()-0.5); const pvy = Math.sin(angle) * 4 + (Math.random()-0.5);
+                s.particleSystem.spawn(px, py, pvx, pvy, 15, Utils.rand(2, 4), CONFIG.COLORS.PLAYER, 'spark');
             }
         }
     },

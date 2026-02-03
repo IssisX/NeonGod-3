@@ -426,12 +426,26 @@ export function renderGame(ctx: CanvasRenderingContext2D, distCtx: CanvasRenderi
         drawDistortion(distCtx, sw.x, sw.y, sw.size, sw.alpha, 'heat');
     }
 
-    // 11. Particles
-    for(const pt of s.particles) {
-        if(!pt.active) continue;
-        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = pt.color; ctx.globalAlpha = pt.life / pt.maxLife;
-        ctx.beginPath(); if (pt.type === 'spark') ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); else ctx.rect(pt.x - pt.size/2, pt.y - pt.size/2, pt.size, pt.size);
-        ctx.fill(); ctx.restore();
+    // 11. Particles (SoA)
+    const ps = s.particleSystem;
+    if (ps && ps.count > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for(let i=0; i<ps.count; i++) {
+            ctx.fillStyle = ps.color[i];
+            ctx.globalAlpha = Math.max(0, ps.life[i] / ps.maxLife[i]);
+            const sz = ps.size[i];
+            const hsz = sz * 0.5;
+
+            if (ps.type[i] === 0) { // Spark
+                ctx.beginPath();
+                ctx.arc(ps.x[i], ps.y[i], sz, 0, Math.PI*2);
+                ctx.fill();
+            } else {
+                ctx.fillRect(ps.x[i] - hsz, ps.y[i] - hsz, sz, sz);
+            }
+        }
+        ctx.restore();
     }
 
     // 12. UI Elements

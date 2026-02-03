@@ -17,9 +17,6 @@ export const Factories = {
       e.brain = undefined;
   },
   
-  particle: () => ({ x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 0, color: '', size: 0, friction: 0.92, type: 'spark', active: false, rotation: 0, rv: 0, sides: 3 }),
-  resetParticle: (p: any) => { p.x = 0; p.y = 0; p.vx = 0; p.vy = 0; p.life = 0; p.maxLife = 0; p.color = ''; p.size = 0; p.friction = 0.92; p.type = 'spark'; p.active = false; p.rotation = 0; p.rv = 0; p.sides = 3; p.targetX = undefined; p.targetY = undefined; },
-  
   gem: () => ({ x: 0, y: 0, vx: 0, vy: 0, val: 0, life: 0, active: false }),
   resetGem: (g: any) => { g.x = 0; g.y = 0; g.vx = 0; g.vy = 0; g.val = 0; g.life = 0; g.active = false; },
   

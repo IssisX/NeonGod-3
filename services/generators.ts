@@ -206,41 +206,30 @@ export function generateBossGeometry(wave: number): { modules: BossModule[], sta
 // --- STANDARD GENERATORS ---
 
 export function createExplosion(s: GameState, x: number, y: number, color: string, count: number, speed: number) {
+    if (!s.particleSystem) return;
     for(let i=0; i<count; i++) {
-        const p = s.pools.particles.acquire();
-        if(p) {
-            p.x = x; p.y = y;
-            const angle = Math.random() * Math.PI * 2;
-            const spd = Math.random() * speed + 1;
-            p.vx = Math.cos(angle) * spd;
-            p.vy = Math.sin(angle) * spd;
-            p.life = Utils.rand(20, 40); p.maxLife = p.life;
-            p.color = color;
-            p.size = Utils.rand(2, 5);
-            p.active = true;
-            s.particles.push(p);
-        }
+        const angle = Math.random() * Math.PI * 2;
+        const spd = Math.random() * speed + 1;
+        const vx = Math.cos(angle) * spd;
+        const vy = Math.sin(angle) * spd;
+        const life = Utils.rand(20, 40);
+        const size = Utils.rand(2, 5);
+        s.particleSystem.spawn(x, y, vx, vy, life, size, color, 'spark');
     }
 }
 
 // New: Directional Sparks for physical impacts
 export function createSparks(s: GameState, x: number, y: number, dx: number, dy: number, count: number, color: string) {
+    if (!s.particleSystem) return;
     const baseAngle = Math.atan2(dy, dx);
     for(let i=0; i<count; i++) {
-        const p = s.pools.particles.acquire();
-        if(p) {
-            p.x = x; p.y = y;
-            const angle = baseAngle + (Math.random() - 0.5); // 1 radian spread
-            const spd = Utils.rand(3, 8);
-            p.vx = Math.cos(angle) * spd;
-            p.vy = Math.sin(angle) * spd;
-            p.life = Utils.rand(10, 20); p.maxLife = p.life;
-            p.color = color;
-            p.size = Utils.rand(1, 3);
-            p.type = 'spark';
-            p.active = true;
-            s.particles.push(p);
-        }
+        const angle = baseAngle + (Math.random() - 0.5);
+        const spd = Utils.rand(3, 8);
+        const vx = Math.cos(angle) * spd;
+        const vy = Math.sin(angle) * spd;
+        const life = Utils.rand(10, 20);
+        const size = Utils.rand(1, 3);
+        s.particleSystem.spawn(x, y, vx, vy, life, size, color, 'spark');
     }
 }
 
