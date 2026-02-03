@@ -16,10 +16,7 @@ interface TouchControlsProps {
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }) => {
-    // We use a ref to track touches to avoid closure staleness in event listeners if we used state for logic
     const touchesRef = useRef<Map<number, TouchData>>(new Map());
-    
-    // We use state only for rendering the visual indicators
     const [visualTouches, setVisualTouches] = useState<TouchData[]>([]);
 
     const updateInput = () => {
@@ -28,13 +25,11 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
         touchesRef.current.forEach(t => {
             const dx = t.curX - t.startX;
             const dy = t.curY - t.startY;
-            const maxDist = 50; // Max joystick travel
+            const maxDist = 50; 
             
-            // Normalize vector
             const dist = Math.min(Math.hypot(dx, dy), maxDist);
             const angle = Math.atan2(dy, dx);
             
-            // Normalized output -1 to 1
             const nx = (Math.cos(angle) * dist) / maxDist;
             const ny = (Math.sin(angle) * dist) / maxDist;
 
@@ -44,7 +39,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
             } else if (t.type === 'aim') {
                 aimX = nx;
                 aimY = ny; 
-                // Deadzone for shooting
                 shooting = dist > 10;
             }
         });
@@ -52,16 +46,16 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
         onInput({ mx, my, aimX, aimY, shooting }); 
     };
 
-    // Update visual state for React render
     const updateVisuals = () => {
         setVisualTouches(Array.from(touchesRef.current.values()));
     };
 
     useEffect(() => {
         const handleTouchStart = (e: TouchEvent) => {
-            // IGNORE TOUCHES ON BUTTONS (UI ELEMENTS)
             const target = e.target as HTMLElement;
-            if (target.closest('button') || target.closest('[role="button"]')) return;
+            // CRITICAL: Ignore touches that land on interactive UI elements (buttons)
+            // This allows us to place buttons in the aim zone without firing the gun
+            if (target.closest('button') || target.closest('[role="button"]') || target.closest('.pointer-events-auto')) return;
 
             e.preventDefault();
             const halfWidth = window.innerWidth / 2;
@@ -70,7 +64,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
                 const t = e.changedTouches[i];
                 const type = t.clientX < halfWidth ? 'move' : 'aim';
                 
-                // If we already have a move/aim touch, ignore new ones of same type (prevents confusion)
                 let alreadyHasType = false;
                 touchesRef.current.forEach(existing => {
                     if (existing.type === type) alreadyHasType = true;
@@ -97,7 +90,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
                 const t = e.changedTouches[i];
                 const data = touchesRef.current.get(t.identifier);
                 if (data) {
-                    // Update current position
                     data.curX = t.clientX;
                     data.curY = t.clientY;
                 }
@@ -115,8 +107,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
             updateVisuals();
         };
 
-        // Attach listeners to window/document to ensure we catch drag-outs
-        // Using non-passive listeners to allow preventDefault
         document.addEventListener('touchstart', handleTouchStart, { passive: false });
         document.addEventListener('touchmove', handleTouchMove, { passive: false });
         document.addEventListener('touchend', handleTouchEnd, { passive: false });
@@ -132,7 +122,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
 
     return (
         <div className="absolute inset-0 pointer-events-none z-[50] overflow-hidden">
-            {/* Visual Indicators for Touches */}
             {visualTouches.map(t => {
                 const dx = t.curX - t.startX;
                 const dy = t.curY - t.startY;
@@ -148,11 +137,8 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
                         className="absolute w-32 h-32 -ml-16 -mt-16 pointer-events-none"
                         style={{ left: t.startX, top: t.startY }}
                     >
-                        {/* Base Ring */}
                         <div className={`absolute inset-0 border-2 rounded-full opacity-30 ${t.type === 'move' ? 'border-cyan-400 bg-cyan-900/20' : 'border-fuchsia-400 bg-fuchsia-900/20'} animate-[ping_0.5s_ease-out_1]`}></div>
                         <div className={`absolute inset-0 border-2 rounded-full opacity-50 ${t.type === 'move' ? 'border-cyan-400' : 'border-fuchsia-400'}`}></div>
-                        
-                        {/* Stick Puck */}
                         <div 
                             className={`absolute w-12 h-12 left-1/2 top-1/2 -ml-6 -mt-6 rounded-full shadow-[0_0_15px_currentColor] ${t.type === 'move' ? 'bg-cyan-400 text-cyan-400' : 'bg-fuchsia-400 text-fuchsia-400'}`}
                             style={{ transform: `translate(${puckX}px, ${puckY}px)` }}
@@ -160,8 +146,6 @@ export const TouchControls: React.FC<TouchControlsProps> = ({ onInput, onSkill }
                     </div>
                 );
             })}
-            
-            {/* Divider Line (Visual Guide) */}
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-32 bg-white/5 rounded-full"></div>
         </div>
     );

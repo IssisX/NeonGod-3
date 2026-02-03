@@ -1,3 +1,4 @@
+
 import { SoundType } from '../types';
 
 export class AudioService {
@@ -14,6 +15,10 @@ export class AudioService {
   currentTempo = 128;
   beat = 0;
   intensity = 0; // 0 to 1
+  
+  // Listener State
+  listenerX = 0;
+  listenerY = 0;
   
   // Scales
   scale = [0, 3, 7, 10, 12, 15, 19, 22, 24]; // Minor Pentatonic + extensions
@@ -58,6 +63,25 @@ export class AudioService {
 
   setTempoMultiplier(mult: number) {
       this.currentTempo = this.baseTempo * mult;
+  }
+  
+  updateListener(x: number, y: number) {
+      if (!this.ctx) return;
+      this.listenerX = x;
+      this.listenerY = y;
+      
+      // Web Audio API Listener uses 3D coords. We map 2D game world to 3D.
+      // Z is up/down for listener usually, or forward/back. 
+      // Let's assume listener is at z=500 looking at z=0 plane.
+      const listener = this.ctx.listener;
+      if (listener.positionX) {
+          listener.positionX.value = x;
+          listener.positionY.value = y;
+          listener.positionZ.value = 500; // Height of camera
+      } else {
+          // Deprecated API fallback
+          listener.setPosition(x, y, 500);
+      }
   }
 
   scheduleMusic() {
@@ -136,6 +160,9 @@ export class AudioService {
       
       osc.start(t);
       osc.stop(t + 0.3);
+      
+      // Cleanup
+      osc.onended = () => { osc.disconnect(); gain.disconnect(); }
   }
 
   synthSnare(t: number, vol: number) {
@@ -169,6 +196,9 @@ export class AudioService {
       oscGain.connect(this.musicGain!);
       osc.start(t);
       osc.stop(t + 0.15);
+      
+      noise.onended = () => { noise.disconnect(); filter.disconnect(); gain.disconnect(); }
+      osc.onended = () => { osc.disconnect(); oscGain.disconnect(); }
   }
 
   synthHat(t: number, vol: number, open: boolean) {
@@ -192,6 +222,8 @@ export class AudioService {
       filter.connect(gain);
       gain.connect(this.musicGain!);
       noise.start(t);
+      
+      noise.onended = () => { noise.disconnect(); filter.disconnect(); gain.disconnect(); }
   }
 
   synthBass(t: number, freq: number) {
@@ -216,6 +248,8 @@ export class AudioService {
       osc.frequency.setValueAtTime(freq, t);
       osc.start(t);
       osc.stop(t + 0.3);
+      
+      osc.onended = () => { osc.disconnect(); filter.disconnect(); gain.disconnect(); }
   }
 
   synthArp(t: number, freq: number) {
@@ -242,16 +276,44 @@ export class AudioService {
       osc.frequency.setValueAtTime(freq, t);
       osc.start(t);
       osc.stop(t + 0.15);
+      
+      osc.onended = () => { osc.disconnect(); filter.disconnect(); gain.disconnect(); panner.disconnect(); }
   }
 
-  play(type: SoundType) {
+  // --- SPATIAL AUDIO SYSTEM ---
+  
+  play(type: SoundType, x?: number, y?: number) {
     if (!this.ctx || !this.sfxGain) return;
     const t = this.ctx.currentTime;
+    
+    // Nodes chain
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    
-    osc.connect(gain);
-    gain.connect(this.sfxGain);
+    let outputNode: AudioNode = gain;
+
+    // Spatial Panning
+    if (x !== undefined && y !== undefined) {
+        const panner = this.ctx.createPanner();
+        panner.panningModel = 'HRTF';
+        panner.distanceModel = 'inverse';
+        panner.refDistance = 300;
+        panner.maxDistance = 3000;
+        panner.rolloffFactor = 1;
+        panner.positionX.value = x;
+        panner.positionY.value = y;
+        panner.positionZ.value = 0;
+        
+        gain.connect(panner);
+        outputNode = panner;
+    }
+
+    outputNode.connect(this.sfxGain);
+
+    const cleanup = () => {
+        osc.disconnect();
+        gain.disconnect();
+        if (outputNode instanceof PannerNode) outputNode.disconnect();
+    };
 
     switch (type) {
       case 'shoot':
@@ -281,10 +343,11 @@ export class AudioService {
         cOsc.frequency.exponentialRampToValueAtTime(50, t + 1.0);
         gain.gain.setValueAtTime(0.5, t);
         gain.gain.linearRampToValueAtTime(0, t + 1.0);
-        cOsc.connect(gain);
+        cOsc.connect(outputNode); // Bypass local var 'osc' logic for specialized sounds
         cOsc.start(t);
         cOsc.stop(t + 1.0);
-        break;
+        cOsc.onended = () => { cOsc.disconnect(); cleanup(); };
+        return; // Early exit handled specially
         
       case 'fracture':
         // High pitch shatter
@@ -294,10 +357,11 @@ export class AudioService {
         fOsc.frequency.linearRampToValueAtTime(1200, t + 0.1);
         gain.gain.setValueAtTime(0.5, t);
         gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
-        fOsc.connect(gain);
+        fOsc.connect(outputNode);
         fOsc.start(t);
         fOsc.stop(t + 0.4);
-        break;
+        fOsc.onended = () => { fOsc.disconnect(); cleanup(); };
+        return;
         
       case 'glitch_start':
         const gOsc = this.ctx.createOscillator();
@@ -314,10 +378,11 @@ export class AudioService {
         gLfoGain.connect(gOsc.frequency);
         gLfo.start(t);
         gLfo.stop(t + 0.3);
-        gOsc.connect(gain);
+        gOsc.connect(outputNode);
         gOsc.start(t);
         gOsc.stop(t + 0.3);
-        break;
+        gOsc.onended = () => { gOsc.disconnect(); gLfo.disconnect(); gLfoGain.disconnect(); cleanup(); }
+        return;
 
       case 'evolve':
         const riseOsc = this.ctx.createOscillator();
@@ -328,7 +393,7 @@ export class AudioService {
         riseGain.gain.setValueAtTime(0, t);
         riseGain.gain.linearRampToValueAtTime(0.5, t + 0.8);
         riseOsc.connect(riseGain);
-        riseGain.connect(this.sfxGain);
+        riseGain.connect(outputNode);
         riseOsc.start(t);
         riseOsc.stop(t + 0.8);
 
@@ -347,23 +412,29 @@ export class AudioService {
         
         impactOsc.connect(impactFilter);
         impactFilter.connect(impactGain);
-        impactGain.connect(this.sfxGain);
+        impactGain.connect(outputNode);
         impactOsc.start(t + 0.8);
         impactOsc.stop(t + 1.5);
-        break;
+        
+        impactOsc.onended = () => { 
+            riseOsc.disconnect(); riseGain.disconnect(); 
+            impactOsc.disconnect(); impactGain.disconnect(); impactFilter.disconnect();
+            cleanup();
+        }
+        return;
       
       case 'explosion':
-        this.playFallback(type, t, gain);
+        this.playFallback(type, t, gain, osc, cleanup);
         break;
       default:
-         this.playFallback(type, t, gain);
+         this.playFallback(type, t, gain, osc, cleanup);
          break;
     }
+    
+    osc.onended = cleanup;
   }
 
-  playFallback(type: string, t: number, gain: GainNode) {
-      const osc = this.ctx!.createOscillator();
-      osc.connect(gain);
+  playFallback(type: string, t: number, gain: GainNode, osc: OscillatorNode, cleanup: () => void) {
       if (type === 'explosion') {
         osc.frequency.setValueAtTime(100, t);
         osc.frequency.exponentialRampToValueAtTime(10, t+0.5);

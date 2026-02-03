@@ -1,4 +1,5 @@
 
+
 import { UpgradeOption, Player } from "./types";
 
 export const CONFIG = Object.freeze({
@@ -6,56 +7,53 @@ export const CONFIG = Object.freeze({
   WORLD: {
       WIDTH: 4000,
       HEIGHT: 4000,
-      SAFE_ZONE: 200, // Margin from edge
+      SAFE_ZONE: 200, 
   },
   QUALITY: {
     TIERS: {
-      HIGH: { particles: 400, gridStep: 2, shadowBlur: 20 },
-      MEDIUM: { particles: 200, gridStep: 3, shadowBlur: 10 },
-      LOW: { particles: 80, gridStep: 4, shadowBlur: 0 },
+      HIGH: { particles: 600, gridStep: 2, shadowBlur: 20 },
+      MEDIUM: { particles: 300, gridStep: 3, shadowBlur: 10 },
+      LOW: { particles: 100, gridStep: 4, shadowBlur: 0 },
     },
     LOAD_THRESHOLDS: { HIGH_MAX: 300, MEDIUM_MAX: 500 },
   },
   SPATIAL: { CELL_SIZE: 150 },
   POOLS: {
-    BULLETS: { initial: 100, max: 400 },
-    PARTICLES: { initial: 300, max: 800 }, 
-    ENEMIES: { initial: 30, max: 300 },
-    GEMS: { initial: 50, max: 200 },
-    PICKUPS: { initial: 5, max: 20 },
-    DEBRIS: { initial: 20, max: 100 },
+    BULLETS: { initial: 200, max: 600 },
+    PARTICLES: { initial: 500, max: 1200 }, 
+    ENEMIES: { initial: 50, max: 400 },
+    GEMS: { initial: 100, max: 300 },
+    PICKUPS: { initial: 10, max: 30 },
+    DEBRIS: { initial: 30, max: 150 },
   },
-  // Spectral Wave Grid Constants
   GRID: { 
       CELL_SIZE: 80, 
-      WAVE_SPEED: 0.15, // c^2 term
-      DAMPING: 0.96,    // Viscous drag
+      WAVE_SPEED: 0.15, 
+      DAMPING: 0.96,    
       SOURCE_STRENGTH: 5.0,
       COLOR_SCALE: 2.0
   },
   BOIDS: {
-    // Variational Potentials (Energy Gradients)
     SEPARATION_RADIUS: 60,
     ALIGNMENT_RADIUS: 120,
     COHESION_RADIUS: 120,
-    // Weights act as potential scaling factors
     SEPARATION_WEIGHT: 4.0,
     ALIGNMENT_WEIGHT: 1.5,
     COHESION_WEIGHT: 0.8,
     PLAYER_WEIGHT: 2.5, 
   },
   HULLS: {
-      INTERCEPTOR: { name: "Interceptor", weapon: "DEFAULT", hp: 300, speed: 1.1, desc: "Agile striker. Balanced speed and firepower." },
-      BASTION: { name: "Bastion", weapon: "SHOTGUN", hp: 800, speed: 0.8, desc: "Armored titan. High durability, heavy weaponry." },
-      ARCHITECT: { name: "Architect", weapon: "RAILGUN", hp: 450, speed: 0.95, desc: "Tech specialist. Starts with defensive orbitals." }
+      INTERCEPTOR: { name: "Interceptor", weapon: "DEFAULT", hp: 300, speed: 1.2, desc: "Agile striker. Balanced speed and firepower." },
+      BASTION: { name: "Bastion", weapon: "SHOTGUN", hp: 800, speed: 0.9, desc: "Armored titan. High durability, heavy weaponry." },
+      ARCHITECT: { name: "Architect", weapon: "RAILGUN", hp: 450, speed: 1.0, desc: "Tech specialist. Starts with defensive orbitals." }
   } as Record<string, any>,
   PLAYER: {
     BASE_HP: 500, 
-    BASE_SPEED: 0.6, 
-    THRUST: 0.18, 
-    FRICTION: 0.94, 
-    ACCELERATION: 0.12,
-    DASH: { COOLDOWN: 120, SPEED: 25, INVULN_DURATION: 30 },
+    BASE_SPEED: 0.8, // Increased base speed
+    THRUST: 0.8,     // Significantly increased thrust for responsiveness
+    FRICTION: 0.88,  // High friction for snappy stopping (was 0.94)
+    ACCELERATION: 0.2,
+    DASH: { COOLDOWN: 120, SPEED: 35, INVULN_DURATION: 30 },
     SKILLS: {
         Q: { NAME: "Chrono Stasis", COOLDOWN: 900, DURATION: 180 }, 
         E: { NAME: "Reality Fracture", COOLDOWN: 600, DURATION: 15 } 
@@ -64,11 +62,11 @@ export const CONFIG = Object.freeze({
     INVULN_ON_HIT: 60, 
   },
   WEAPONS: {
-    // Recoil values reduced by ~80% to decouple firing from movement physics
-    DEFAULT: { name: "Pulse Rifle", color: "#ffe600", speed: 14, spread: 0.05, dmgMult: 1.0, fireDelay: 1, size: 4, pierce: 0, homing: 0, count: 1, lifetime: 80, recoil: 0.002, knockback: 3 },
-    SHOTGUN: { name: "Scattergun", color: "#ff5500", speed: 11, spread: 0.35, dmgMult: 0.7, fireDelay: 1.2, size: 3, pierce: 1, homing: 0, count: 5, lifetime: 45, recoil: 0.05, knockback: 6 },
-    RAILGUN: { name: "Arc Caster", color: "#00ffff", speed: 45, spread: 0, dmgMult: 0.8, fireDelay: 3.5, size: 12, pierce: 99, homing: 0, count: 1, lifetime: 25, type: 'beam', recoil: 0.04, knockback: 1 },
-    VOID: { name: "Void Ray", color: "#aa00ff", speed: 10, spread: 0.15, dmgMult: 1.4, fireDelay: 1.1, size: 8, pierce: 0, homing: 0.2, count: 1, lifetime: 100, recoil: 0.01, knockback: 8 },
+    // Recoil values lowered significantly to prevent loss of control
+    DEFAULT: { name: "Pulse Rifle", color: "#ffe600", speed: 16, spread: 0.05, dmgMult: 1.0, fireDelay: 6, size: 4, pierce: 0, homing: 0, count: 1, lifetime: 80, recoil: 0.5, knockback: 3 },
+    SHOTGUN: { name: "Scattergun", color: "#ff5500", speed: 12, spread: 0.35, dmgMult: 0.7, fireDelay: 45, size: 3, pierce: 1, homing: 0, count: 6, lifetime: 45, recoil: 4.0, knockback: 6 },
+    RAILGUN: { name: "Arc Caster", color: "#00ffff", speed: 50, spread: 0, dmgMult: 2.5, fireDelay: 90, size: 12, pierce: 99, homing: 0, count: 1, lifetime: 25, type: 'beam', recoil: 5.0, knockback: 1 },
+    VOID: { name: "Void Ray", color: "#aa00ff", speed: 12, spread: 0.15, dmgMult: 1.4, fireDelay: 8, size: 8, pierce: 0, homing: 0.2, count: 1, lifetime: 100, recoil: 0.2, knockback: 8 },
   } as Record<string, any>,
   ENEMIES: {
     CHASER: { hp: 15, speed: 1.8, size: 14, color: "#ff0055", xp: 10, score: 100, hpScale: 3.0, speedScale: 0.02, sides: 3, behavior: 'flock', mass: 1.2 },
@@ -78,10 +76,11 @@ export const CONFIG = Object.freeze({
     DASHER: { hp: 25, speed: 4.5, size: 16, color: "#ffff00", xp: 25, score: 250, hpScale: 4.0, speedScale: 0.05, sides: 4, behavior: 'dash_attack', mass: 1.5 },
     SPLITTER: { hp: 40, speed: 1.0, size: 24, color: "#0088ff", xp: 30, score: 300, hpScale: 5.0, speedScale: 0.02, sides: 5, behavior: 'split_on_death', mass: 3.0 },
     ORBITER: { hp: 20, speed: 2.5, size: 12, color: "#ff00ff", xp: 20, score: 200, hpScale: 3.0, speedScale: 0.03, sides: 0, behavior: 'orbit', mass: 1.0 },
+    GUARDIAN: { hp: 150, speed: 0.5, size: 28, color: "#0077ff", xp: 100, score: 500, hpScale: 12, speedScale: 0.01, sides: 4, behavior: 'shield', mass: 30.0 },
     
     // BOSS VARIANTS
     BOSS_WARLORD: { hp: 2000, speed: 3.5, size: 60, color: "#ff2200", xp: 2000, score: 5000, hpScale: 200, sides: 3, behavior: 'warlord', mass: 4000.0 },
-    BOSS_HIVE: { hp: 3500, speed: 1.0, size: 75, color: "#9900ff", xp: 4000, score: 10000, hpScale: 400, sides: 6, behavior: 'hive', mass: 6000.0 },
+    BOSS_HIVE: { hp: 3500, speed: 0.8, size: 75, color: "#9900ff", xp: 4000, score: 10000, hpScale: 400, sides: 6, behavior: 'hive', mass: 6000.0 },
     BOSS_OMNI: { hp: 6000, speed: 1.5, size: 90, color: "#ffffff", xp: 8000, score: 20000, hpScale: 600, sides: 0, behavior: 'omni', mass: 8000.0 },
     
     PYLON: { hp: 500, speed: 0, size: 25, color: "#00ff00", xp: 0, score: 0, sides: 4, mass: 1000.0 },
@@ -91,8 +90,8 @@ export const CONFIG = Object.freeze({
   WAVES: {
       SWARM: { interval: 10, types: ['chaser'] },
       MIXED: { interval: 60, types: ['chaser', 'shooter'] },
-      HEAVY: { interval: 120, types: ['tank', 'shooter', 'dasher'] },
-      ELITE_SQUAD: { interval: 30, types: ['dasher', 'orbiter'] },
+      HEAVY: { interval: 120, types: ['tank', 'shooter', 'dasher', 'guardian'] },
+      ELITE_SQUAD: { interval: 30, types: ['dasher', 'orbiter', 'guardian'] },
       CHAOS: { interval: 20, types: ['kamikaze', 'splitter', 'orbiter'] }
   },
   ELITE: { HP_MULT: 3.0, SPEED_MULT: 1.3, SIZE_MULT: 1.4, XP_MULT: 5, SCORE_MULT: 5, COLOR: "#ffffff", CHANCE_PER_WAVE: 0.03, MAX_CHANCE: 0.4 },

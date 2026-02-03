@@ -34,6 +34,11 @@ export interface Player extends Entity {
   invuln: number;
   hitFlash: number;
   muzzleFlash: number;
+  
+  // NEW: Separate recoil vector for damping control
+  recoilX: number;
+  recoilY: number;
+  
   weapon: 'DEFAULT' | 'SHOTGUN' | 'RAILGUN' | 'VOID';
   skills: {
     q: Skill;
@@ -123,6 +128,7 @@ export interface Enemy extends Entity {
   squadId?: string;
   squadRole?: 'protector' | 'flanker' | 'fodder';
   squadOffset?: { angle: number, dist: number };
+  behavior?: string;
   
   // New Procedural Data
   modules?: BossModule[];
@@ -148,6 +154,7 @@ export interface BlackHole extends Entity {
     radius: number;
     pullRange: number;
     color: string;
+    active: boolean;
 }
 
 export interface Gem extends Entity {
@@ -162,6 +169,7 @@ export interface Pickup extends Entity {
     active: boolean;
 }
 
+// PHYSICS-DRIVEN UI TEXT
 export interface FloatingText {
   x: number;
   y: number;
@@ -169,8 +177,11 @@ export interface FloatingText {
   vy: number;
   text: string;
   life: number;
+  maxLife: number;
   color: string;
   size: number;
+  isCrit: boolean;
+  opacity: number;
 }
 
 export interface Shockwave {
@@ -212,6 +223,9 @@ export interface Camera {
     y: number;
     zoom: number;
     targetZoom: number;
+    // Directional Impulse Vectors
+    kickX: number;
+    kickY: number;
 }
 
 export interface Debris extends Entity {
@@ -222,6 +236,12 @@ export interface Debris extends Entity {
     vRot: number;
     sides: number;
     health: number;
+    type: 'asteroid' | 'structure' | 'scrap';
+    
+    // Physics Props
+    mass: number;
+    friction: number;
+    flash: number; // For hit feedback
 }
 
 export interface Star {
@@ -233,6 +253,14 @@ export interface Star {
 }
 
 export interface ShieldRipple {
+    x: number;
+    y: number;
+    radius: number;
+    alpha: number;
+}
+
+export interface Arena {
+    active: boolean;
     x: number;
     y: number;
     radius: number;
@@ -278,6 +306,7 @@ export interface GameState {
   
   chromaticAberration: number;
   anomaly: Anomaly;
+  arena: Arena;
 
   startTime: number;
   runDuration: number;
@@ -381,7 +410,8 @@ export interface GameCallbacks {
     onGameOver: (runData: RunData) => void;
     onBossSpawn: () => void;
     onWeaponEvolve: (name: string) => void;
-    playSound: (type: SoundType) => void;
+    playSound: (type: SoundType, x?: number, y?: number) => void; // Updated for spatial
     setAudioIntensity: (val: number) => void;
     setAudioTempo: (val: number) => void;
+    updateAudioListener: (x: number, y: number) => void; // New callback
 }

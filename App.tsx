@@ -189,9 +189,10 @@ export default function App() {
         onWeaponEvolve: (name) => {
           setUI(prev => ({ ...prev, weaponName: name }));
         },
-        playSound: (type) => audio.play(type),
+        playSound: (type, x, y) => audio.play(type, x, y),
         setAudioIntensity: (val) => audio.setIntensity(val),
-        setAudioTempo: (val) => audio.setTempoMultiplier(val)
+        setAudioTempo: (val) => audio.setTempoMultiplier(val),
+        updateAudioListener: (x, y) => audio.updateListener(x, y)
       });
       
       // Calculate DPS
@@ -233,7 +234,11 @@ export default function App() {
 
     if (webglRef.current && canvasRef.current) {
         const t = time * 0.001;
-        const glitch = s.anomaly.active ? (s.anomaly.intensity || 1.0) : 0;
+        // Glitch intensity logic: Anomaly OR Reality Fracture Skill active
+        const anomalyGlitch = s.anomaly.active ? (s.anomaly.intensity || 1.0) : 0;
+        const skillGlitch = s.player.skills.e.active ? 1.5 : 0;
+        const glitch = Math.max(anomalyGlitch, skillGlitch);
+        
         const aber = s.chromaticAberration;
         // Calculate damage intensity (0 to 1)
         const damage = s.player && s.player.maxHp > 0 ? Math.max(0, 1.0 - (s.player.hp / s.player.maxHp)) : 0;
