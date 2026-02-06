@@ -329,7 +329,7 @@ export function setupEnemy(s: GameState, e: Enemy, type: string, x: number, y: n
         e.xp *= CONFIG.ELITE.XP_MULT; 
         e.score *= CONFIG.ELITE.SCORE_MULT; 
         e.mass *= 2.0; e.color = CONFIG.ELITE.COLOR;
-        e.status.push({ type: 'BURN', duration: 0, power: 0, timer: 0 }); // Visual marker
+        // e.statusFlags |= 1; // Visual marker? Nah, Elite color is enough.
     } else {
         e.isElite = false;
     }

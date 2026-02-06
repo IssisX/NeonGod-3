@@ -5,6 +5,7 @@ import { Utils } from '../utils';
 import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawnBoss, createAsteroid, createShipDebris, createSparks } from './generators';
 import { PhysicsSystem } from './physics';
 import { AIFactory, Brain } from './ai';
+import { IKChain } from './ik';
 
 // --- MATH HELPERS ---
 
@@ -367,7 +368,20 @@ const EnemiesSystem = {
             // UTILITY AI INTEGRATION
             let fx = 0, fy = 0;
 
-            if (!e.type.startsWith('boss')) {
+            // Flow Field Integration
+            // If enemy is standard (chaser/swarm), use flow field instead of expensive seek
+            if (s.flowField && (e.type === 'chaser' || e.type === 'swarm' || e.type === 'kamikaze') && !e.behavior?.includes('charge')) {
+                const flow = s.flowField.sample(e.x, e.y);
+                if (flow.x !== 0 || flow.y !== 0) {
+                    fx = flow.x * e.speed;
+                    fy = flow.y * e.speed;
+                } else {
+                    // Fallback if off-grid
+                    const ang = Math.atan2(p.y - e.y, p.x - e.x);
+                    fx = Math.cos(ang) * e.speed;
+                    fy = Math.sin(ang) * e.speed;
+                }
+            } else if (!e.type.startsWith('boss')) {
                 if (!e.brain) {
                     e.brain = AIFactory.createBrain(e.type);
                 }
@@ -394,23 +408,26 @@ const EnemiesSystem = {
             }
 
             // PHYSICS INTEGRATION (RK4)
-            // Note: force is mass * accel. 'fx' here is desired velocity or force?
-            // The AI returns 'force-like' vectors (scaled by speed).
-            // Let's treat them as acceleration forces.
-
-            const speedMod = e.status.some(st => st.type === 'FREEZE') ? 0.5 : 1.0;
 
             // Snake Body Logic Override
             if (e.type === 'snake_body' && e.parentId) {
                  const parent = s.enemies.find(par => par.id === e.parentId);
                  if (parent && parent.active) {
+                     // NEW: IK Chain Handling
+                     // We don't have a single chain for the whole snake in this entity model (entities are separate).
+                     // But we can simulate "Forward Reaching" constraint here.
+
                      const dist = Utils.dist(e.x, e.y, parent.x, parent.y);
-                     if (dist > e.size) {
-                         const ang = Math.atan2(parent.y - e.y, parent.x - e.x);
-                         // Use RK4 to move towards parent
-                         fx = Math.cos(ang) * 10; // Strong pull
-                         fy = Math.sin(ang) * 10;
-                     } else {
+                     const targetLen = e.size * 1.2;
+
+                     // If too far, snap or pull hard
+                     if (dist > targetLen) {
+                         const angle = Math.atan2(parent.y - e.y, parent.x - e.x);
+                         // Instead of force, we set position (IK style) but smoothed
+                         const tx = parent.x - Math.cos(angle) * targetLen;
+                         const ty = parent.y - Math.sin(angle) * targetLen;
+                         e.x = Utils.lerp(e.x, tx, 0.5);
+                         e.y = Utils.lerp(e.y, ty, 0.5);
                          fx = 0; fy = 0;
                      }
                  } else {
@@ -420,7 +437,9 @@ const EnemiesSystem = {
                  }
             }
 
-            PhysicsSystem.integrate(e, fx * 0.2, fy * 0.2, dt, 0.95, e.mass);
+            // Apply speed mod from Freeze status
+            const drag = (e.statusFlags & 2) ? 0.8 : 0.95; // Higher drag if frozen (0.2 vs 0.05)
+            PhysicsSystem.integrate(e, fx * 0.2, fy * 0.2, dt, drag, e.mass);
 
             // Rotation
             const speed = Math.hypot(e.vx, e.vy);
@@ -430,16 +449,28 @@ const EnemiesSystem = {
                  e.rotation = Math.atan2(e.vy, e.vx);
             }
 
-            // Status Effects Update
-            for (let k = e.status.length - 1; k >= 0; k--) {
-                const st = e.status[k];
-                st.timer++;
-                if (st.type === 'BURN' && st.timer % 30 === 0) {
-                    e.hp -= st.power;
-                    createFloatingText(s, e.x, e.y - 15, Math.floor(st.power).toString(), '#ffaa00', 10);
-                    if (e.hp <= 0) handleEnemyDeath(s, e, callbacks, {x: 0, y: 0});
+            // Status Effects Update (Bitwise)
+            if (e.statusFlags > 0) {
+                // BURN (Bit 0)
+                if (e.statusFlags & 1) {
+                    e.statusTimers[0]++; // Timer
+                    if (e.statusTimers[0] % 30 === 0) {
+                        const dmg = e.statusTimers[3]; // Burn Power
+                        e.hp -= dmg;
+                        createFloatingText(s, e.x, e.y - 15, Math.floor(dmg).toString(), '#ffaa00', 10);
+                        if (e.hp <= 0) handleEnemyDeath(s, e, callbacks, {x: 0, y: 0});
+                    }
+                    if (e.statusTimers[0] >= 180) { // Duration
+                        e.statusFlags &= ~1; // Clear bit
+                    }
                 }
-                if (st.timer >= st.duration) e.status.splice(k, 1);
+                // FREEZE (Bit 1)
+                if (e.statusFlags & 2) {
+                    e.statusTimers[1]++;
+                    if (e.statusTimers[1] >= 120) {
+                        e.statusFlags &= ~2;
+                    }
+                }
             }
 
             // Player Collision Check
@@ -464,6 +495,15 @@ const EnemiesSystem = {
                      const ang = Math.atan2(s.worldHeight/2 - e.y, s.worldWidth/2 - e.x);
                      e.vx += Math.cos(ang); e.vy += Math.sin(ang);
                 }
+            }
+
+            // IK Chain Update (Visual)
+            if (e.ikChain) {
+                // Pin head to enemy center
+                e.ikChain.baseX = e.x;
+                e.ikChain.baseY = e.y;
+                // Reach towards player
+                e.ikChain.resolve(p.x, p.y);
             }
         }
     }
@@ -961,7 +1001,15 @@ export const Systems = {
                                 const isCrit = b.dmg > 20;
                                 createFloatingText(s, e.x, e.y - 20, Math.floor(b.dmg).toString(), isCrit ? '#ff3333' : e.color, 14, isCrit);
                                 
-                                if(b.elemental) { if(b.elemental.fire > 0) e.status.push({ type: 'BURN', duration: 180, power: 5, timer: 0 }); if(b.elemental.ice > 0) e.status.push({ type: 'FREEZE', duration: 120, power: 0.3, timer: 0 }); }
+                                if(b.elemental) {
+                                    if(b.elemental.fire > 0) {
+                                        e.statusFlags |= 1; // Burn
+                                        e.statusTimers[3] = 5; // Burn Damage
+                                    }
+                                    if(b.elemental.ice > 0) {
+                                        e.statusFlags |= 2; // Freeze
+                                    }
+                                }
                                 if (e.hp <= 0 && !e.dead) handleEnemyDeath(s, e, callbacks, {x: b.vx, y: b.vy});
                             }
                             if (b.pierce <= 0) hitEnemy = true; else b.pierce--;

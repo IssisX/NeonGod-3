@@ -311,6 +311,32 @@ export function renderGame(ctx: CanvasRenderingContext2D, distCtx: CanvasRenderi
             ctx.translate(e.x, e.y);
         }
 
+        // IK Chains (Tentacles)
+        if (e.ikChain) {
+            ctx.restore(); // Draw in world space
+            ctx.strokeStyle = e.color;
+            ctx.lineWidth = e.size * 0.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            const joints = e.ikChain.joints;
+            if (joints.length > 0) {
+                ctx.moveTo(joints[0].x, joints[0].y);
+                for(let k=1; k<joints.length; k++) {
+                    ctx.lineTo(joints[k].x, joints[k].y);
+                }
+            }
+            ctx.stroke();
+
+            // Draw Joints
+            ctx.fillStyle = '#fff';
+            for(let k=0; k<joints.length; k++) {
+                ctx.beginPath(); ctx.arc(joints[k].x, joints[k].y, e.size * 0.2, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.save();
+            ctx.translate(e.x, e.y);
+        }
+
         if (e.modules) {
             // BOSS
             const rot = s.frame * 0.005; 
