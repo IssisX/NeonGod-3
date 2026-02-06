@@ -7,6 +7,8 @@ import { Factories, ObjectPool } from './pools';
 import { Systems } from './systems';
 import { renderGame } from './renderer';
 import { createEvolutionEffect } from './generators';
+import { ParticleSystem } from './particles';
+import { FlowField } from './flowfield';
 
 export { renderGame, createEvolutionEffect };
 
@@ -20,6 +22,14 @@ export function updateGame(s: GameState, callbacks: GameCallbacks) {
     if (s.hitStop > 0) {
         s.hitStop--;
         return; 
+    }
+
+    // Update Particle System (independent of spatial grid)
+    if(s.particleSystem) s.particleSystem.update(s.worldTimeScale);
+
+    // Update Flow Field (Throttled: 5Hz is enough)
+    if (s.flowField && s.frame % 12 === 0) {
+        s.flowField.update(s);
     }
 
     s.spatialGrid.clear();
@@ -155,13 +165,14 @@ export function createGameState(width: number, height: number): GameState {
         pools: {
             bullets: new ObjectPool(Factories.bullet, Factories.resetBullet, CONFIG.POOLS.BULLETS.initial, CONFIG.POOLS.BULLETS.max),
             enemies: new ObjectPool(Factories.enemy, Factories.resetEnemy, CONFIG.POOLS.ENEMIES.initial, CONFIG.POOLS.ENEMIES.max),
-            particles: new ObjectPool(Factories.particle, Factories.resetParticle, CONFIG.POOLS.PARTICLES.initial, CONFIG.POOLS.PARTICLES.max),
             gems: new ObjectPool(Factories.gem, Factories.resetGem, CONFIG.POOLS.GEMS.initial, CONFIG.POOLS.GEMS.max),
             pickups: new ObjectPool(Factories.pickup, Factories.resetPickup, CONFIG.POOLS.PICKUPS.initial, CONFIG.POOLS.PICKUPS.max),
             debris: new ObjectPool(Factories.debris, Factories.resetDebris, CONFIG.POOLS.DEBRIS.initial, CONFIG.POOLS.DEBRIS.max),
         },
         spatialGrid: new SpatialGrid(CONFIG.SPATIAL.CELL_SIZE),
         visualGrid: new VisualGrid(CONFIG.WORLD.WIDTH, CONFIG.WORLD.HEIGHT, CONFIG.GRID.CELL_SIZE),
+        particleSystem: new ParticleSystem(CONFIG.POOLS.PARTICLES.max),
+        flowField: new FlowField(CONFIG.WORLD.WIDTH, CONFIG.WORLD.HEIGHT),
         damageDealtBuffer: 0
     };
     

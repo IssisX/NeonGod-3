@@ -1,9 +1,11 @@
 
-
 import { GameState, Enemy, GameCallbacks, BossModule, Player } from '../types';
 import { CONFIG } from '../constants';
 import { Utils } from '../utils';
 import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawnBoss, createAsteroid, createShipDebris, createSparks } from './generators';
+import { PhysicsSystem } from './physics';
+import { AIFactory, Brain } from './ai';
+import { IKChain } from './ik';
 
 // --- MATH HELPERS ---
 
@@ -184,100 +186,11 @@ function calculateAutoPilot(s: GameState) {
 
 // 3. SQUAD TACTICS IMPLEMENTATION
 function updateSquadTactics(s: GameState) {
-    const elites = s.enemies.filter(e => e.active && !e.dead && e.isElite && !e.type.startsWith('boss'));
-    const unassigned = s.enemies.filter(e => e.active && !e.dead && !e.isElite && !e.squadId && e.type !== 'projectile');
-
-    for (const grunt of unassigned) {
-        let nearest = null;
-        let minD = 400; 
-        for (const leader of elites) {
-            const d = Utils.dist(grunt.x, grunt.y, leader.x, leader.y);
-            if (d < minD) { minD = d; nearest = leader; }
-        }
-
-        if (nearest) {
-            grunt.squadId = nearest.id;
-            grunt.squadRole = Math.random() > 0.5 ? 'flanker' : 'protector';
-            grunt.squadOffset = { 
-                angle: Math.random() * Math.PI * 2, 
-                dist: 60 + Math.random() * 80 
-            };
-        }
-    }
+    // ... Deprecated by Utility AI
 }
 
-function applyVariationalBoids(e: Enemy, s: GameState): {x: number, y: number} {
-    const p = s.player;
-    let fx = 0, fy = 0;
-    
-    let targetX = p.x;
-    let targetY = p.y;
-    
-    if (e.squadId) {
-        const leader = s.enemies.find(l => l.id === e.squadId && l.active);
-        if (leader) {
-            const angle = (e.squadOffset?.angle || 0) + (s.frame * 0.01); 
-            const dist = e.squadOffset?.dist || 50;
-            targetX = leader.x + Math.cos(angle) * dist;
-            targetY = leader.y + Math.sin(angle) * dist;
-            fx += leader.vx * 0.5;
-            fy += leader.vy * 0.5;
-        } else {
-            e.squadId = undefined;
-        }
-    }
-
-    // 1. Separation
-    let sepX = 0, sepY = 0, count = 0;
-    const neighbors = s.spatialGrid.queryRadius(e.x, e.y, CONFIG.BOIDS.SEPARATION_RADIUS);
-    for (const other of neighbors) {
-        if (other === e || other === p) continue;
-        const o = other as Enemy;
-        if (!o.active || o.dead) continue;
-        
-        const dx = e.x - o.x;
-        const dy = e.y - o.y;
-        const dSq = dx*dx + dy*dy;
-        if (dSq > 0.1 && dSq < CONFIG.BOIDS.SEPARATION_RADIUS * CONFIG.BOIDS.SEPARATION_RADIUS) {
-            const d = Math.sqrt(dSq);
-            const force = (CONFIG.BOIDS.SEPARATION_RADIUS - d) / d; 
-            sepX += dx * force;
-            sepY += dy * force;
-            count++;
-        }
-    }
-    if (count > 0) {
-        fx += sepX * CONFIG.BOIDS.SEPARATION_WEIGHT * 2.0;
-        fy += sepY * CONFIG.BOIDS.SEPARATION_WEIGHT * 2.0;
-    }
-    
-    // 2. Attraction
-    const tdx = targetX - e.x;
-    const tdy = targetY - e.y;
-    const dist = Math.hypot(tdx, tdy);
-    if (dist > 0) {
-        let weight = CONFIG.BOIDS.PLAYER_WEIGHT;
-        if (e.behavior === 'keep_distance' && !e.squadId) {
-            const idealDist = 300;
-            if (dist < idealDist) weight = -weight * 1.5; 
-            else if (dist < idealDist + 50) weight = 0; 
-        }
-        fx += (tdx / dist) * weight;
-        fy += (tdy / dist) * weight;
-    }
-    
-    // Arena Constraint for enemies
-    if (s.arena.active) {
-        const distToCenter = Utils.dist(e.x, e.y, s.arena.x, s.arena.y);
-        if (distToCenter > s.arena.radius) {
-            const angle = Math.atan2(s.arena.y - e.y, s.arena.x - e.x);
-            fx += Math.cos(angle) * 10; // Push back in
-            fy += Math.sin(angle) * 10;
-        }
-    }
-    
-    return { x: fx, y: fy };
-}
+// ... Deprecated by Utility AI
+// function applyVariationalBoids
 
 function handleShooting(s: GameState, callbacks: GameCallbacks) {
     const p = s.player;
@@ -298,7 +211,13 @@ function handleShooting(s: GameState, callbacks: GameCallbacks) {
         s.camera.kickY -= Math.sin(p.angle) * (recoilForce * 2);
     }
 
-    callbacks.playSound('shoot');
+    // Dynamic Weapon Sound
+    let soundType: any = 'shoot_default';
+    if (p.weapon === 'SHOTGUN') soundType = 'shoot_shotgun';
+    else if (p.weapon === 'RAILGUN') soundType = 'shoot_railgun';
+    else if (p.weapon === 'VOID') soundType = 'shoot_void';
+
+    callbacks.playSound(soundType);
 
     const totalShots = (weapon.count || 1) + p.stats.multishot;
     const spread = weapon.spread;
@@ -352,12 +271,8 @@ function handleDash(s: GameState, callbacks: GameCallbacks, mx: number, my: numb
     callbacks.playSound('dash');
     
     for(let i=0; i<10; i++) {
-        const pt = s.pools.particles.acquire();
-        if(pt) {
-            pt.x = p.x; pt.y = p.y;
-            pt.vx = -dx * Math.random() * 5; pt.vy = -dy * Math.random() * 5;
-            pt.life = 20; pt.maxLife = 20; pt.color = CONFIG.COLORS.PLAYER_DASH; pt.size = 2; pt.active = true;
-            s.particles.push(pt);
+        if (s.particleSystem) {
+            s.particleSystem.spawn(p.x, p.y, -dx * Math.random() * 5, -dy * Math.random() * 5, 20, 2, CONFIG.COLORS.PLAYER_DASH, 'spark');
         }
     }
 }
@@ -444,83 +359,118 @@ function handlePlayerHit(s: GameState, e: Enemy, callbacks: GameCallbacks) {
 const EnemiesSystem = {
     update: (s: GameState, callbacks: GameCallbacks) => {
         const p = s.player;
+        const dt = s.worldTimeScale;
+
         for (let i = s.enemies.length - 1; i >= 0; i--) {
             const e = s.enemies[i];
             if (!e.active || e.dead) continue;
 
-            // Physics
-            e.x += e.vx * s.worldTimeScale;
-            e.y += e.vy * s.worldTimeScale;
-
-            // Friction
-            e.vx *= (e.mass > 10 ? 0.98 : 0.95);
-            e.vy *= (e.mass > 10 ? 0.98 : 0.95);
-
-            // Behavior
+            // UTILITY AI INTEGRATION
             let fx = 0, fy = 0;
-            if (e.behavior && !e.type.startsWith('boss')) {
-                // Use existing helper if applicable
-                if (e.behavior === 'flock' || e.behavior === 'rush' || e.behavior === 'keep_distance' || e.behavior === 'dash_attack' || e.behavior === 'orbit' || e.behavior === 'shield') {
-                    const force = applyVariationalBoids(e, s);
-                    fx = force.x; fy = force.y;
-                } else if (e.behavior === 'tank') {
+
+            // Flow Field Integration
+            // If enemy is standard (chaser/swarm), use flow field instead of expensive seek
+            if (s.flowField && (e.type === 'chaser' || e.type === 'swarm' || e.type === 'kamikaze') && !e.behavior?.includes('charge')) {
+                const flow = s.flowField.sample(e.x, e.y);
+                if (flow.x !== 0 || flow.y !== 0) {
+                    fx = flow.x * e.speed;
+                    fy = flow.y * e.speed;
+                } else {
+                    // Fallback if off-grid
                     const ang = Math.atan2(p.y - e.y, p.x - e.x);
-                    fx = Math.cos(ang) * 0.2; fy = Math.sin(ang) * 0.2;
+                    fx = Math.cos(ang) * e.speed;
+                    fy = Math.sin(ang) * e.speed;
                 }
-            } else if (e.type.startsWith('boss')) {
-                 // Simple boss tracking
+            } else if (!e.type.startsWith('boss')) {
+                if (!e.brain) {
+                    e.brain = AIFactory.createBrain(e.type);
+                }
+
+                const result = e.brain.think(s, e);
+                fx = result.fx;
+                fy = result.fy;
+                e.behavior = result.action; // Debug/Vis
+
+                // Arena Constraint for enemies
+                if (s.arena.active) {
+                    const distToCenter = Utils.dist(e.x, e.y, s.arena.x, s.arena.y);
+                    if (distToCenter > s.arena.radius) {
+                        const angle = Math.atan2(s.arena.y - e.y, s.arena.x - e.x);
+                        fx += Math.cos(angle) * 10; // Push back in
+                        fy += Math.sin(angle) * 10;
+                    }
+                }
+            } else {
+                 // Boss Logic (Keep simple tracking for now or migrate to AI too)
                  const ang = Math.atan2(p.y - e.y, p.x - e.x);
-                 fx = Math.cos(ang) * 0.5; fy = Math.sin(ang) * 0.5;
+                 fx = Math.cos(ang) * 0.5 * e.speed;
+                 fy = Math.sin(ang) * 0.5 * e.speed;
             }
 
-            // Snake Body Logic
+            // PHYSICS INTEGRATION (RK4)
+
+            // Snake Body Logic Override
             if (e.type === 'snake_body' && e.parentId) {
                  const parent = s.enemies.find(par => par.id === e.parentId);
                  if (parent && parent.active) {
+                     // NEW: IK Chain Handling
+                     // We don't have a single chain for the whole snake in this entity model (entities are separate).
+                     // But we can simulate "Forward Reaching" constraint here.
+
                      const dist = Utils.dist(e.x, e.y, parent.x, parent.y);
-                     if (dist > e.size) {
-                         const ang = Math.atan2(parent.y - e.y, parent.x - e.x);
-                         const speed = Math.hypot(parent.vx, parent.vy); // Follow parent speed
-                         e.x = Utils.lerp(e.x, parent.x - Math.cos(ang) * e.size, 0.2);
-                         e.y = Utils.lerp(e.y, parent.y - Math.sin(ang) * e.size, 0.2);
+                     const targetLen = e.size * 1.2;
+
+                     // If too far, snap or pull hard
+                     if (dist > targetLen) {
+                         const angle = Math.atan2(parent.y - e.y, parent.x - e.x);
+                         // Instead of force, we set position (IK style) but smoothed
+                         const tx = parent.x - Math.cos(angle) * targetLen;
+                         const ty = parent.y - Math.sin(angle) * targetLen;
+                         e.x = Utils.lerp(e.x, tx, 0.5);
+                         e.y = Utils.lerp(e.y, ty, 0.5);
                          fx = 0; fy = 0;
                      }
                  } else {
-                     e.hp = 0; e.dead = true; // Cascade death
+                     e.hp = 0; e.dead = true;
                      handleEnemyDeath(s, e, callbacks, {x:0, y:0});
+                     continue;
                  }
             }
 
-            // Apply Force
-            const speedMod = e.status.some(st => st.type === 'FREEZE') ? 0.5 : 1.0;
-            e.vx += fx * 0.1 * s.worldTimeScale * speedMod;
-            e.vy += fy * 0.1 * s.worldTimeScale * speedMod;
-
-            // Max Speed Cap
-            const speed = Math.hypot(e.vx, e.vy);
-            const maxSpeed = e.speed * speedMod;
-            if (speed > maxSpeed) {
-                e.vx = (e.vx / speed) * maxSpeed;
-                e.vy = (e.vy / speed) * maxSpeed;
-            }
+            // Apply speed mod from Freeze status
+            const drag = (e.statusFlags & 2) ? 0.8 : 0.95; // Higher drag if frozen (0.2 vs 0.05)
+            PhysicsSystem.integrate(e, fx * 0.2, fy * 0.2, dt, drag, e.mass);
 
             // Rotation
+            const speed = Math.hypot(e.vx, e.vy);
             if (e.type !== 'snake_body' && !e.type.startsWith('boss') && e.sides > 0) {
                  e.rotation += speed * 0.05 * s.worldTimeScale;
             } else if (speed > 0.1) {
                  e.rotation = Math.atan2(e.vy, e.vx);
             }
 
-            // Status Effects Update
-            for (let k = e.status.length - 1; k >= 0; k--) {
-                const st = e.status[k];
-                st.timer++;
-                if (st.type === 'BURN' && st.timer % 30 === 0) {
-                    e.hp -= st.power;
-                    createFloatingText(s, e.x, e.y - 15, Math.floor(st.power).toString(), '#ffaa00', 10);
-                    if (e.hp <= 0) handleEnemyDeath(s, e, callbacks, {x: 0, y: 0});
+            // Status Effects Update (Bitwise)
+            if (e.statusFlags > 0) {
+                // BURN (Bit 0)
+                if (e.statusFlags & 1) {
+                    e.statusTimers[0]++; // Timer
+                    if (e.statusTimers[0] % 30 === 0) {
+                        const dmg = e.statusTimers[3]; // Burn Power
+                        e.hp -= dmg;
+                        createFloatingText(s, e.x, e.y - 15, Math.floor(dmg).toString(), '#ffaa00', 10);
+                        if (e.hp <= 0) handleEnemyDeath(s, e, callbacks, {x: 0, y: 0});
+                    }
+                    if (e.statusTimers[0] >= 180) { // Duration
+                        e.statusFlags &= ~1; // Clear bit
+                    }
                 }
-                if (st.timer >= st.duration) e.status.splice(k, 1);
+                // FREEZE (Bit 1)
+                if (e.statusFlags & 2) {
+                    e.statusTimers[1]++;
+                    if (e.statusTimers[1] >= 120) {
+                        e.statusFlags &= ~2;
+                    }
+                }
             }
 
             // Player Collision Check
@@ -542,10 +492,18 @@ const EnemiesSystem = {
             // Cleanup Out of Bounds
             if (!Utils.inBounds(e.x, e.y, s.worldWidth, s.worldHeight, 200)) {
                 if (!e.type.startsWith('boss')) {
-                    // Soft wall or wrap? Let's soft wall them back in.
-                    const ang = Math.atan2(s.worldHeight/2 - e.y, s.worldWidth/2 - e.x);
-                    e.vx += Math.cos(ang); e.vy += Math.sin(ang);
+                     const ang = Math.atan2(s.worldHeight/2 - e.y, s.worldWidth/2 - e.x);
+                     e.vx += Math.cos(ang); e.vy += Math.sin(ang);
                 }
+            }
+
+            // IK Chain Update (Visual)
+            if (e.ikChain) {
+                // Pin head to enemy center
+                e.ikChain.baseX = e.x;
+                e.ikChain.baseY = e.y;
+                // Reach towards player
+                e.ikChain.resolve(p.x, p.y);
             }
         }
     }
@@ -553,14 +511,8 @@ const EnemiesSystem = {
 
 const CleanupSystem = {
     update: (s: GameState) => {
-        // Particles
-        for(let i = s.particles.length - 1; i >= 0; i--) {
-            const p = s.particles[i];
-            p.life--;
-            p.x += p.vx * s.worldTimeScale; p.y += p.vy * s.worldTimeScale;
-            p.vx *= p.friction; p.vy *= p.friction;
-            if (p.life <= 0) { s.pools.particles.release(p); s.particles.splice(i, 1); }
-        }
+        // Particles now handled by s.particleSystem.update() called in engine.ts
+
         // Pickups
         for(let i = s.pickups.length - 1; i >= 0; i--) {
             const p = s.pickups[i];
@@ -570,6 +522,7 @@ const CleanupSystem = {
         // Gems
         for(let i = s.gems.length - 1; i >= 0; i--) {
             const g = s.gems[i];
+            // Physics Update for Gems? Maybe too expensive. Keep Euler.
             g.x += g.vx; g.y += g.vy;
             g.vx *= CONFIG.GEMS.FRICTION; g.vy *= CONFIG.GEMS.FRICTION;
             g.life -= s.worldTimeScale;
@@ -591,7 +544,7 @@ const CleanupSystem = {
             d.rotation += d.vRot * s.worldTimeScale;
             d.vRot *= d.friction; // Angular damping
 
-            // Linear Physics
+            // Linear Physics (RK4 candidate but overkill for debris)
             d.x += d.vx * s.worldTimeScale;
             d.y += d.vy * s.worldTimeScale;
             d.vx *= d.friction; 
@@ -796,9 +749,36 @@ export const Systems = {
             const thrust = CONFIG.PLAYER.THRUST * p.stats.speedMod * s.playerTimeScale;
             const len = Math.hypot(mx, my);
             if (len > 1) { mx /= len; my /= len; }
-            p.vx += mx * thrust; p.vy += my * thrust;
-            p.vx *= CONFIG.PLAYER.FRICTION; p.vy *= CONFIG.PLAYER.FRICTION;
-            p.recoilX *= 0.70; p.recoilY *= 0.70; // INCREASED DAMPING (was 0.85) to stop sliding
+
+            // NEW: Physics System Integration for Player
+            // mx, my are direction inputs. Thrust is force.
+            // But PhysicsSystem.integrate takes force.
+            // We need to match existing feel.
+            // Existing: p.vx += mx * thrust; p.vx *= friction.
+            // New: integrate(p, mx * thrust * factor, my * thrust * factor, dt, friction_factor)
+
+            // To match exact feel is hard, but let's approximate.
+            // Euler: v += a; v *= f;
+            // RK4: v += a... with drag.
+
+            // Let's pass force = mx * thrust * 10 (arbitrary scale to match acceleration)
+            // Friction in RK4 is linear drag (1-f).
+            // CONFIG.PLAYER.FRICTION is 0.88 per frame.
+            // RK4 friction is drag coefficient.
+            // If v *= 0.88, then v_new = v * 0.88 = v - v*0.12.
+            // So drag = 0.12. But RK4 takes 'friction' param as 0.95 -> drag 0.05.
+            // So we pass CONFIG.PLAYER.FRICTION directly if integrate uses it as "velocity multiplier per frame".
+
+            // In PhysicsSystem.integrate:
+            // const drag = (1.0 - friction);
+            // return (fx - vx * drag) / mass;
+
+            // So if I pass 0.88, drag is 0.12. This matches "velocity loses 12% per second" roughly?
+            // No, my implementation in PhysicsSystem uses it as per-step.
+
+            PhysicsSystem.integrate(p, mx * thrust * 5.0, my * thrust * 5.0, s.playerTimeScale, CONFIG.PLAYER.FRICTION);
+
+            p.recoilX *= 0.70; p.recoilY *= 0.70;
             p.x += p.recoilX; p.y += p.recoilY;
 
             // Arena Constraint
@@ -826,15 +806,11 @@ export const Systems = {
             p.y = Utils.clamp(p.y + p.vy, 0, s.worldHeight);
             
             if (len > 0.1 && s.visualGrid) s.visualGrid.applyForce(p.x, p.y, 40, len * 5);
-            if (len > 0.1 && s.frame % 2 === 0) {
-                const t = s.pools.particles.acquire();
-                if(t) {
-                    const angle = Math.atan2(my, mx) + Math.PI;
-                    t.x = p.x + Utils.rand(-5, 5); t.y = p.y + Utils.rand(-5, 5);
-                    t.vx = Math.cos(angle) * 4 + (Math.random()-0.5); t.vy = Math.sin(angle) * 4 + (Math.random()-0.5);
-                    t.life = 15; t.maxLife = 15; t.color = CONFIG.COLORS.PLAYER; t.size = Utils.rand(2, 4); t.type = 'spark'; t.active = true;
-                    s.particles.push(t);
-                }
+            if (len > 0.1 && s.frame % 2 === 0 && s.particleSystem) {
+                const angle = Math.atan2(my, mx) + Math.PI;
+                const px = p.x + Utils.rand(-5, 5); const py = p.y + Utils.rand(-5, 5);
+                const pvx = Math.cos(angle) * 4 + (Math.random()-0.5); const pvy = Math.sin(angle) * 4 + (Math.random()-0.5);
+                s.particleSystem.spawn(px, py, pvx, pvy, 15, Utils.rand(2, 4), CONFIG.COLORS.PLAYER, 'spark');
             }
         }
     },
@@ -1025,7 +1001,15 @@ export const Systems = {
                                 const isCrit = b.dmg > 20;
                                 createFloatingText(s, e.x, e.y - 20, Math.floor(b.dmg).toString(), isCrit ? '#ff3333' : e.color, 14, isCrit);
                                 
-                                if(b.elemental) { if(b.elemental.fire > 0) e.status.push({ type: 'BURN', duration: 180, power: 5, timer: 0 }); if(b.elemental.ice > 0) e.status.push({ type: 'FREEZE', duration: 120, power: 0.3, timer: 0 }); }
+                                if(b.elemental) {
+                                    if(b.elemental.fire > 0) {
+                                        e.statusFlags |= 1; // Burn
+                                        e.statusTimers[3] = 5; // Burn Damage
+                                    }
+                                    if(b.elemental.ice > 0) {
+                                        e.statusFlags |= 2; // Freeze
+                                    }
+                                }
                                 if (e.hp <= 0 && !e.dead) handleEnemyDeath(s, e, callbacks, {x: b.vx, y: b.vy});
                             }
                             if (b.pierce <= 0) hitEnemy = true; else b.pierce--;

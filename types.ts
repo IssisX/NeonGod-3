@@ -76,12 +76,10 @@ export interface Bullet extends Entity {
   elemental?: { fire: number; ice: number; volt: number };
 }
 
-export interface StatusEffect {
-    type: 'BURN' | 'FREEZE';
-    duration: number;
-    power: number;
-    timer: number;
-}
+// BITWISE STATUS FLAGS
+export const STATUS_BURN = 1;   // 0001
+export const STATUS_FREEZE = 2; // 0010
+export const STATUS_STUN = 4;   // 0100
 
 // PROCEDURAL BOSS PARTS
 export interface BossModule {
@@ -122,7 +120,11 @@ export interface Enemy extends Entity {
   history?: {x: number, y: number}[]; 
   segmentIndex?: number;
   trail?: {x: number, y: number}[]; 
-  status: StatusEffect[];
+
+  // OPTIMIZED STATUS
+  statusFlags: number; // Bitmask
+  statusTimers: Float32Array; // [BurnTimer, FreezeTimer, StunTimer, BurnDmg, FreezePower, 0, 0, 0]
+
   state?: 'idle' | 'charge' | 'recover';
   stateTimer?: number;
   squadId?: string;
@@ -130,8 +132,14 @@ export interface Enemy extends Entity {
   squadOffset?: { angle: number, dist: number };
   behavior?: string;
   
+  // AI Memory
+  targetX?: number;
+  targetY?: number;
+  brain?: any;
+
   // New Procedural Data
   modules?: BossModule[];
+  ikChain?: any; // IKChain
 }
 
 export interface Particle extends Entity {
@@ -338,13 +346,14 @@ export interface GameState {
   pools: {
     bullets: any;
     enemies: any;
-    particles: any;
     gems: any;
     pickups: any;
     debris: any; // Added debris pool
   };
   spatialGrid: any;
   visualGrid: any;
+  particleSystem?: any;
+  flowField?: any;
   
   damageDealtBuffer: number;
 }
@@ -403,7 +412,7 @@ export interface InputState {
     mouse: { x: number; y: number; down: boolean };
 }
 
-export type SoundType = 'shoot' | 'explosion' | 'hit' | 'dash' | 'levelup' | 'gameover' | 'spawn' | 'charge' | 'ultimate' | 'pickup' | 'evolve' | 'chrono' | 'fracture' | 'glitch_start' | 'spark' | 'void_implode';
+export type SoundType = 'shoot_default' | 'shoot_shotgun' | 'shoot_railgun' | 'shoot_void' | 'explosion' | 'hit' | 'dash' | 'levelup' | 'gameover' | 'spawn' | 'charge' | 'ultimate' | 'pickup' | 'evolve' | 'chrono' | 'fracture' | 'glitch_start' | 'spark' | 'void_implode';
 
 export interface GameCallbacks {
     onLevelUp: (options: UpgradeOption[]) => void;
