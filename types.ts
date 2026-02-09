@@ -201,6 +201,14 @@ export interface Orbital {
   dist: number;
 }
 
+export interface StickInput {
+  mx: number;
+  my: number;
+  aimX: number;
+  aimY: number;
+  shooting: boolean;
+}
+
 export interface TouchInput {
   id: number;
   originX: number;
@@ -208,6 +216,25 @@ export interface TouchInput {
   x: number;
   y: number;
   type: 'move' | 'aim';
+}
+
+export interface ISpatialGrid {
+  clear(): void;
+  insert(entity: Entity): void;
+  queryRadius(x: number, y: number, radius: number): Entity[];
+}
+
+export interface IVisualGrid {
+  update(step?: number): void;
+  applyForce(x: number, y: number, radius: number, strength: number): void;
+  render(ctx: CanvasRenderingContext2D, step?: number): void;
+  uCurrent: Float32Array;
+  uPrev: Float32Array;
+}
+
+export interface IObjectPool<T> {
+  acquire(): T | null;
+  release(obj: T): void;
 }
 
 export interface Anomaly {
@@ -336,15 +363,16 @@ export interface GameState {
   bossActive: boolean;
   upgradeStacks: Map<string, number>;
   pools: {
-    bullets: any;
-    enemies: any;
-    particles: any;
-    gems: any;
-    pickups: any;
-    debris: any; // Added debris pool
+    bullets: IObjectPool<Bullet>;
+    enemies: IObjectPool<Enemy>;
+    particles: IObjectPool<Particle>;
+    gems: IObjectPool<Gem>;
+    pickups: IObjectPool<Pickup>;
+    debris: IObjectPool<Debris>;
   };
-  spatialGrid: any;
-  visualGrid: any;
+  stickInput?: StickInput;
+  spatialGrid: ISpatialGrid;
+  visualGrid: IVisualGrid;
   
   damageDealtBuffer: number;
 }
