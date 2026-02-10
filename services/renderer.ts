@@ -156,6 +156,56 @@ function drawMechanicalLimb(ctx: CanvasRenderingContext2D, x1: number, y1: numbe
     ctx.restore();
 }
 
+function drawVoidDragonSegment(ctx: CanvasRenderingContext2D, e: Enemy) {
+    // Procedural Scales
+    ctx.save();
+    ctx.rotate(e.rotation);
+
+    const color = e.hitFlash > 0 ? '#ffffff' : e.color;
+    const isCore = e.type === 'boss_dragon_head' || e.type === 'boss_dragon_tail';
+
+    ctx.shadowColor = color;
+    ctx.shadowBlur = e.hitFlash > 0 ? 20 : 10;
+
+    // Body Shape
+    ctx.beginPath();
+    ctx.moveTo(e.size, 0);
+    ctx.lineTo(0, e.size * 0.6);
+    ctx.lineTo(-e.size, 0);
+    ctx.lineTo(0, -e.size * 0.6);
+    ctx.closePath();
+
+    if (e.hitFlash > 0) {
+        ctx.fillStyle = '#ffffff';
+    } else {
+        const grad = ctx.createLinearGradient(-e.size, 0, e.size, 0);
+        grad.addColorStop(0, '#000');
+        grad.addColorStop(0.5, color);
+        grad.addColorStop(1, '#000');
+        ctx.fillStyle = grad;
+    }
+    ctx.fill();
+
+    // Spine Glow
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-e.size * 0.5, 0);
+    ctx.lineTo(e.size * 0.5, 0);
+    ctx.stroke();
+
+    // Scale Detail
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -e.size * 0.6);
+    ctx.lineTo(e.size * 0.5, 0);
+    ctx.lineTo(0, e.size * 0.6);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
 function drawInterceptor(ctx: CanvasRenderingContext2D, p: Player, s: GameState) {
     const power = Math.hypot(p.vx, p.vy) / 5;
     drawEnginePlume(ctx, -12, -6, Math.PI, power, '#00ffff');
@@ -311,8 +361,16 @@ export function renderGame(ctx: CanvasRenderingContext2D, distCtx: CanvasRenderi
             ctx.translate(e.x, e.y);
         }
 
-        if (e.modules) {
-            // BOSS
+        // Void Dragon Rendering
+        if (e.chain) {
+            drawVoidDragonSegment(ctx, e);
+            if (e.modules) { // If Head with extra bits
+                const rot = s.frame * 0.005;
+                ctx.rotate(rot);
+                for(const mod of e.modules) drawBossModule(ctx, mod, e.hitFlash);
+            }
+        } else if (e.modules) {
+            // Standard BOSS
             const rot = s.frame * 0.005; 
             ctx.rotate(rot);
             for(const mod of e.modules) drawMechanicalLimb(ctx, 0, 0, mod.xOffset, mod.yOffset);
