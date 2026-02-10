@@ -76,19 +76,38 @@ function drawDissipatingTrail(ctx: CanvasRenderingContext2D, trail: {x: number, 
 
 // Draw heat distortion to the distortion canvas
 // Channel: 'r' for Heat (Noise displacement), 'g' for Gravity (Swirl/Pull)
+const DISTORTION_CACHE = {
+    heat: new Array<CanvasGradient>(256),
+    gravity: new Array<CanvasGradient>(256)
+};
+
+function getDistortionGradient(ctx: CanvasRenderingContext2D, type: 'heat' | 'gravity', intensity: number) {
+    const level = Math.min(255, Math.max(0, Math.floor(intensity * 255)));
+    if (!DISTORTION_CACHE[type][level]) {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        const rVal = type === 'heat' ? level : 0;
+        const gVal = type === 'gravity' ? level : 0;
+        g.addColorStop(0, `rgba(${rVal}, ${gVal}, 0, 1.0)`);
+        g.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        DISTORTION_CACHE[type][level] = g;
+    }
+    return DISTORTION_CACHE[type][level];
+}
+
 function drawDistortion(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, intensity: number, type: 'heat' | 'gravity') {
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    
-    const rVal = type === 'heat' ? Math.floor(intensity * 255) : 0;
-    const gVal = type === 'gravity' ? Math.floor(intensity * 255) : 0;
-    
-    grad.addColorStop(0, `rgba(${rVal}, ${gVal}, 0, 1.0)`);
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    
+    if (radius <= 0) return;
+    const grad = getDistortionGradient(ctx, type, intensity);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(radius, radius);
+
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
     ctx.fill();
+
+    ctx.restore();
 }
 
 // --- BOSS RENDERER ---
