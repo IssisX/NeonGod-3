@@ -7,19 +7,7 @@ import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawn
 
 // --- MATH HELPERS ---
 
-function pointInPolygon(px: number, py: number, polygon: number[]): boolean {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 2; i < polygon.length; j = i, i += 2) {
-        const xi = polygon[i], yi = polygon[i + 1];
-        const xj = polygon[j], yj = polygon[j + 1];
-        const intersect = ((yi > py) !== (yj > py)) &&
-            (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    return inside;
-}
-
-function getTransformedPolygon(e: Enemy, mod: BossModule, rot: number): number[] {
+function checkPointInBossModule(px: number, py: number, e: Enemy, mod: BossModule, rot: number): boolean {
     const cos = Math.cos(rot);
     const sin = Math.sin(rot);
     const modX = e.x + (mod.xOffset * cos - mod.yOffset * sin);
@@ -27,14 +15,33 @@ function getTransformedPolygon(e: Enemy, mod: BossModule, rot: number): number[]
     const totalRot = rot + mod.rotation;
     const mCos = Math.cos(totalRot);
     const mSin = Math.sin(totalRot);
-    const poly: number[] = [];
-    for (let i = 0; i < mod.shape.length; i += 2) {
-        const lx = mod.shape[i];
-        const ly = mod.shape[i + 1];
-        poly.push(modX + (lx * mCos - ly * mSin));
-        poly.push(modY + (lx * mSin + ly * mCos));
+
+    let inside = false;
+    const shape = mod.shape;
+    const len = shape.length;
+
+    // Initial previous point (last point in polygon)
+    let j = len - 2;
+    let ljx = shape[j];
+    let ljy = shape[j+1];
+    let xj = modX + (ljx * mCos - ljy * mSin);
+    let yj = modY + (ljx * mSin + ljy * mCos);
+
+    for (let i = 0; i < len; i += 2) {
+        const lix = shape[i];
+        const liy = shape[i+1];
+        const xi = modX + (lix * mCos - liy * mSin);
+        const yi = modY + (lix * mSin + liy * mCos);
+
+        const intersect = ((yi > py) !== (yj > py)) &&
+            (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+
+        // Update previous point for next iteration
+        xj = xi;
+        yj = yi;
     }
-    return poly;
+    return inside;
 }
 
 // --- CORE SYSTEMS ---
@@ -990,8 +997,7 @@ export const Systems = {
                             if (Utils.dist(b.x, b.y, e.x, e.y) < 300) {
                                 // 2. Narrow Phase (Poly check)
                                 for (const mod of e.modules) {
-                                    const poly = getTransformedPolygon(e, mod, bossRot);
-                                    if (pointInPolygon(b.x, b.y, poly)) {
+                                    if (checkPointInBossModule(b.x, b.y, e, mod, bossRot)) {
                                         collision = true;
                                         createExplosion(s, b.x, b.y, mod.color, 3, 0.5); // Visual feedback on hit part
                                         break; 
