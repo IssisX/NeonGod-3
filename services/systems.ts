@@ -111,17 +111,18 @@ function handleEnemyDeath(s: GameState, e: Enemy, callbacks: GameCallbacks, impa
 }
 
 // 2. PREDICTIVE AI AUTOPILOT
+
+const AUTO_PILOT_CANDIDATES: {x: number, y: number}[] = [];
+for(let i=0; i<16; i++) {
+    const angle = (Math.PI * 2 / 16) * i;
+    AUTO_PILOT_CANDIDATES.push({ x: Math.cos(angle), y: Math.sin(angle) });
+}
+
 function calculateAutoPilot(s: GameState) {
     const p = s.player;
     let bestX = 0, bestY = 0, maxScore = -Infinity;
     
-    const candidates = [];
-    for(let i=0; i<16; i++) {
-        const angle = (Math.PI * 2 / 16) * i;
-        candidates.push({ x: Math.cos(angle), y: Math.sin(angle) });
-    }
-
-    for (const dir of candidates) {
+    for (const dir of AUTO_PILOT_CANDIDATES) {
         let score = 0;
         const testX = p.x + dir.x * 50;
         const testY = p.y + dir.y * 50;
@@ -566,13 +567,13 @@ const CleanupSystem = {
             p.life--;
             p.x += p.vx * s.worldTimeScale; p.y += p.vy * s.worldTimeScale;
             p.vx *= p.friction; p.vy *= p.friction;
-            if (p.life <= 0) { s.pools.particles.release(p); s.particles.splice(i, 1); }
+            if (p.life <= 0) { s.pools.particles.release(p); Utils.removeSwap(s.particles, i); }
         }
         // Pickups
         for(let i = s.pickups.length - 1; i >= 0; i--) {
             const p = s.pickups[i];
             p.life--;
-            if (p.life <= 0) { s.pools.pickups.release(p); s.pickups.splice(i, 1); }
+            if (p.life <= 0) { s.pools.pickups.release(p); Utils.removeSwap(s.pickups, i); }
         }
         // Gems
         for(let i = s.gems.length - 1; i >= 0; i--) {
@@ -586,8 +587,8 @@ const CleanupSystem = {
                 g.vy += (s.player.y - g.y) * CONFIG.GEMS.PULL_STRENGTH;
             }
             if (dist < CONFIG.GEMS.COLLECT_RADIUS) {
-                s.player.xp += g.val; s.pools.gems.release(g); s.gems.splice(i, 1);
-            } else if (g.life <= 0) { s.pools.gems.release(g); s.gems.splice(i, 1); }
+                s.player.xp += g.val; s.pools.gems.release(g); Utils.removeSwap(s.gems, i);
+            } else if (g.life <= 0) { s.pools.gems.release(g); Utils.removeSwap(s.gems, i); }
         }
         // Debris Physics Interaction
         const p = s.player;
@@ -618,7 +619,7 @@ const CleanupSystem = {
             
             // Force field constraint for debris? Optional, let them float out.
             if (!Utils.inBounds(d.x, d.y, s.worldWidth, s.worldHeight)) {
-                s.pools.debris.release(d); s.debris.splice(i, 1);
+                s.pools.debris.release(d); Utils.removeSwap(s.debris, i);
             }
         }
 
@@ -631,14 +632,14 @@ const CleanupSystem = {
             t.vx *= 0.95; // Friction
             t.life--; 
             if(t.life < 20) t.opacity = t.life / 20;
-            if(t.life <= 0) s.texts.splice(i, 1);
+            if(t.life <= 0) Utils.removeSwap(s.texts, i);
         }
         
         for(let i = s.shockwaves.length - 1; i >= 0; i--) {
-            const sw = s.shockwaves[i]; sw.size += sw.speed; sw.alpha -= 0.05; if(sw.alpha <= 0) s.shockwaves.splice(i, 1);
+            const sw = s.shockwaves[i]; sw.size += sw.speed; sw.alpha -= 0.05; if(sw.alpha <= 0) Utils.removeSwap(s.shockwaves, i);
         }
         for(let i = s.enemies.length - 1; i >= 0; i--) {
-            if(s.enemies[i].dead) { s.pools.enemies.release(s.enemies[i]); s.enemies.splice(i, 1); }
+            if(s.enemies[i].dead) { s.pools.enemies.release(s.enemies[i]); Utils.removeSwap(s.enemies, i); }
         }
     }
 };
@@ -853,7 +854,7 @@ export const Systems = {
             // Black Hole Logic
             for (let i = s.blackHoles.length - 1; i >= 0; i--) {
                 const bh = s.blackHoles[i];
-                if (!bh.active) { s.blackHoles.splice(i, 1); continue; }
+                if (!bh.active) { Utils.removeSwap(s.blackHoles, i); continue; }
                 bh.life -= s.worldTimeScale;
                 bh.radius = Math.min(60, bh.radius + 0.5 * s.worldTimeScale);
                 const nearby = s.spatialGrid.queryRadius(bh.x, bh.y, bh.pullRange);
@@ -910,7 +911,7 @@ export const Systems = {
 
                 b.x += b.vx * s.worldTimeScale; b.y += b.vy * s.worldTimeScale; b.life -= s.worldTimeScale;
                 if (s.frame % 2 === 0) { b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 5) b.trail.shift(); }
-                if (b.life <= 0 || !Utils.inBounds(b.x, b.y, s.worldWidth, s.worldHeight, 200)) { s.pools.bullets.release(b); s.bullets.splice(bi, 1); continue; }
+                if (b.life <= 0 || !Utils.inBounds(b.x, b.y, s.worldWidth, s.worldHeight, 200)) { s.pools.bullets.release(b); Utils.removeSwap(s.bullets, bi); continue; }
 
                 // Hit Detection
                 const candidates = s.spatialGrid.queryRadius(b.x, b.y, 100); 
@@ -1039,7 +1040,7 @@ export const Systems = {
                         }
                     }
                 }
-                if (hitEnemy) { s.pools.bullets.release(b); s.bullets.splice(bi, 1); }
+                if (hitEnemy) { s.pools.bullets.release(b); Utils.removeSwap(s.bullets, bi); }
             }
         }
     },

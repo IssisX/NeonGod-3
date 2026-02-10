@@ -34,24 +34,32 @@ export class ObjectPool<T> {
     reset: (obj: T) => void;
     max: number;
     available: T[];
-    active: Set<T>;
+    activeCount: number;
 
     constructor(factory: () => T, reset: (obj: T) => void, initial = 50, max = 200) {
         this.factory = factory; this.reset = reset; this.max = max;
-        this.available = []; this.active = new Set();
+        this.available = []; this.activeCount = 0;
         for (let i = 0; i < initial; i++) this.available.push(factory());
     }
     acquire(): T | null {
         let obj;
         if (this.available.length > 0) obj = this.available.pop();
-        else if (this.active.size < this.max) obj = this.factory();
+        else if (this.activeCount < this.max) obj = this.factory();
         else return null;
-        if (obj) this.active.add(obj);
+
+        if (obj) {
+            this.activeCount++;
+            // Mark as active if not already (safeguard, though factory/caller should handle it)
+            // We don't touch properties here to keep it generic, but relies on caller setting state.
+        }
         return obj || null;
     }
     release(obj: T) {
-        if (!this.active.has(obj)) return;
-        this.active.delete(obj);
+        // Safety check using the 'active' property common to all pooled entities in this game
+        // This replaces the Set lookup with an O(1) property check
+        if ((obj as any).active === false) return;
+
+        this.activeCount--;
         this.reset(obj);
         this.available.push(obj);
     }
