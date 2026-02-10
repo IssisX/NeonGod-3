@@ -12,4 +12,11 @@ export const Utils = {
     const dist = Math.hypot(w / 2, h / 2) + offset;
     return { x: w / 2 + Math.cos(angle) * dist, y: h / 2 + Math.sin(angle) * dist };
   },
+  removeSwap: <T>(arr: T[], index: number): void => {
+    const last = arr.length - 1;
+    if (index !== last) {
+        arr[index] = arr[last];
+    }
+    arr.pop();
+  }
 };

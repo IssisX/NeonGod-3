@@ -7,19 +7,7 @@ import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawn
 
 // --- MATH HELPERS ---
 
-function pointInPolygon(px: number, py: number, polygon: number[]): boolean {
-    let inside = false;
-    for (let i = 0, j = polygon.length - 2; i < polygon.length; j = i, i += 2) {
-        const xi = polygon[i], yi = polygon[i + 1];
-        const xj = polygon[j], yj = polygon[j + 1];
-        const intersect = ((yi > py) !== (yj > py)) &&
-            (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
-    return inside;
-}
-
-function getTransformedPolygon(e: Enemy, mod: BossModule, rot: number): number[] {
+function checkPointInBossModule(px: number, py: number, e: Enemy, mod: BossModule, rot: number): boolean {
     const cos = Math.cos(rot);
     const sin = Math.sin(rot);
     const modX = e.x + (mod.xOffset * cos - mod.yOffset * sin);
@@ -27,14 +15,33 @@ function getTransformedPolygon(e: Enemy, mod: BossModule, rot: number): number[]
     const totalRot = rot + mod.rotation;
     const mCos = Math.cos(totalRot);
     const mSin = Math.sin(totalRot);
-    const poly: number[] = [];
-    for (let i = 0; i < mod.shape.length; i += 2) {
-        const lx = mod.shape[i];
-        const ly = mod.shape[i + 1];
-        poly.push(modX + (lx * mCos - ly * mSin));
-        poly.push(modY + (lx * mSin + ly * mCos));
+
+    let inside = false;
+    const shape = mod.shape;
+    const len = shape.length;
+
+    // Initial previous point (last point in polygon)
+    let j = len - 2;
+    let ljx = shape[j];
+    let ljy = shape[j+1];
+    let xj = modX + (ljx * mCos - ljy * mSin);
+    let yj = modY + (ljx * mSin + ljy * mCos);
+
+    for (let i = 0; i < len; i += 2) {
+        const lix = shape[i];
+        const liy = shape[i+1];
+        const xi = modX + (lix * mCos - liy * mSin);
+        const yi = modY + (lix * mSin + liy * mCos);
+
+        const intersect = ((yi > py) !== (yj > py)) &&
+            (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+
+        // Update previous point for next iteration
+        xj = xi;
+        yj = yi;
     }
-    return poly;
+    return inside;
 }
 
 // --- CORE SYSTEMS ---
@@ -104,17 +111,18 @@ function handleEnemyDeath(s: GameState, e: Enemy, callbacks: GameCallbacks, impa
 }
 
 // 2. PREDICTIVE AI AUTOPILOT
+
+const AUTO_PILOT_CANDIDATES: {x: number, y: number}[] = [];
+for(let i=0; i<16; i++) {
+    const angle = (Math.PI * 2 / 16) * i;
+    AUTO_PILOT_CANDIDATES.push({ x: Math.cos(angle), y: Math.sin(angle) });
+}
+
 function calculateAutoPilot(s: GameState) {
     const p = s.player;
     let bestX = 0, bestY = 0, maxScore = -Infinity;
     
-    const candidates = [];
-    for(let i=0; i<16; i++) {
-        const angle = (Math.PI * 2 / 16) * i;
-        candidates.push({ x: Math.cos(angle), y: Math.sin(angle) });
-    }
-
-    for (const dir of candidates) {
+    for (const dir of AUTO_PILOT_CANDIDATES) {
         let score = 0;
         const testX = p.x + dir.x * 50;
         const testY = p.y + dir.y * 50;
@@ -559,13 +567,13 @@ const CleanupSystem = {
             p.life--;
             p.x += p.vx * s.worldTimeScale; p.y += p.vy * s.worldTimeScale;
             p.vx *= p.friction; p.vy *= p.friction;
-            if (p.life <= 0) { s.pools.particles.release(p); s.particles.splice(i, 1); }
+            if (p.life <= 0) { s.pools.particles.release(p); Utils.removeSwap(s.particles, i); }
         }
         // Pickups
         for(let i = s.pickups.length - 1; i >= 0; i--) {
             const p = s.pickups[i];
             p.life--;
-            if (p.life <= 0) { s.pools.pickups.release(p); s.pickups.splice(i, 1); }
+            if (p.life <= 0) { s.pools.pickups.release(p); Utils.removeSwap(s.pickups, i); }
         }
         // Gems
         for(let i = s.gems.length - 1; i >= 0; i--) {
@@ -579,8 +587,8 @@ const CleanupSystem = {
                 g.vy += (s.player.y - g.y) * CONFIG.GEMS.PULL_STRENGTH;
             }
             if (dist < CONFIG.GEMS.COLLECT_RADIUS) {
-                s.player.xp += g.val; s.pools.gems.release(g); s.gems.splice(i, 1);
-            } else if (g.life <= 0) { s.pools.gems.release(g); s.gems.splice(i, 1); }
+                s.player.xp += g.val; s.pools.gems.release(g); Utils.removeSwap(s.gems, i);
+            } else if (g.life <= 0) { s.pools.gems.release(g); Utils.removeSwap(s.gems, i); }
         }
         // Debris Physics Interaction
         const p = s.player;
@@ -611,7 +619,7 @@ const CleanupSystem = {
             
             // Force field constraint for debris? Optional, let them float out.
             if (!Utils.inBounds(d.x, d.y, s.worldWidth, s.worldHeight)) {
-                s.pools.debris.release(d); s.debris.splice(i, 1);
+                s.pools.debris.release(d); Utils.removeSwap(s.debris, i);
             }
         }
 
@@ -624,14 +632,14 @@ const CleanupSystem = {
             t.vx *= 0.95; // Friction
             t.life--; 
             if(t.life < 20) t.opacity = t.life / 20;
-            if(t.life <= 0) s.texts.splice(i, 1);
+            if(t.life <= 0) Utils.removeSwap(s.texts, i);
         }
         
         for(let i = s.shockwaves.length - 1; i >= 0; i--) {
-            const sw = s.shockwaves[i]; sw.size += sw.speed; sw.alpha -= 0.05; if(sw.alpha <= 0) s.shockwaves.splice(i, 1);
+            const sw = s.shockwaves[i]; sw.size += sw.speed; sw.alpha -= 0.05; if(sw.alpha <= 0) Utils.removeSwap(s.shockwaves, i);
         }
         for(let i = s.enemies.length - 1; i >= 0; i--) {
-            if(s.enemies[i].dead) { s.pools.enemies.release(s.enemies[i]); s.enemies.splice(i, 1); }
+            if(s.enemies[i].dead) { s.pools.enemies.release(s.enemies[i]); Utils.removeSwap(s.enemies, i); }
         }
     }
 };
@@ -846,7 +854,7 @@ export const Systems = {
             // Black Hole Logic
             for (let i = s.blackHoles.length - 1; i >= 0; i--) {
                 const bh = s.blackHoles[i];
-                if (!bh.active) { s.blackHoles.splice(i, 1); continue; }
+                if (!bh.active) { Utils.removeSwap(s.blackHoles, i); continue; }
                 bh.life -= s.worldTimeScale;
                 bh.radius = Math.min(60, bh.radius + 0.5 * s.worldTimeScale);
                 const nearby = s.spatialGrid.queryRadius(bh.x, bh.y, bh.pullRange);
@@ -903,7 +911,7 @@ export const Systems = {
 
                 b.x += b.vx * s.worldTimeScale; b.y += b.vy * s.worldTimeScale; b.life -= s.worldTimeScale;
                 if (s.frame % 2 === 0) { b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 5) b.trail.shift(); }
-                if (b.life <= 0 || !Utils.inBounds(b.x, b.y, s.worldWidth, s.worldHeight, 200)) { s.pools.bullets.release(b); s.bullets.splice(bi, 1); continue; }
+                if (b.life <= 0 || !Utils.inBounds(b.x, b.y, s.worldWidth, s.worldHeight, 200)) { s.pools.bullets.release(b); Utils.removeSwap(s.bullets, bi); continue; }
 
                 // Hit Detection
                 const candidates = s.spatialGrid.queryRadius(b.x, b.y, 100); 
@@ -990,8 +998,7 @@ export const Systems = {
                             if (Utils.dist(b.x, b.y, e.x, e.y) < 300) {
                                 // 2. Narrow Phase (Poly check)
                                 for (const mod of e.modules) {
-                                    const poly = getTransformedPolygon(e, mod, bossRot);
-                                    if (pointInPolygon(b.x, b.y, poly)) {
+                                    if (checkPointInBossModule(b.x, b.y, e, mod, bossRot)) {
                                         collision = true;
                                         createExplosion(s, b.x, b.y, mod.color, 3, 0.5); // Visual feedback on hit part
                                         break; 
@@ -1033,7 +1040,7 @@ export const Systems = {
                         }
                     }
                 }
-                if (hitEnemy) { s.pools.bullets.release(b); s.bullets.splice(bi, 1); }
+                if (hitEnemy) { s.pools.bullets.release(b); Utils.removeSwap(s.bullets, bi); }
             }
         }
     },
