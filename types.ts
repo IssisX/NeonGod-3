@@ -132,6 +132,14 @@ export interface Enemy extends Entity {
   
   // New Procedural Data
   modules?: BossModule[];
+
+  // Void Dragon / Chain Logic
+  chain?: {
+      prevId?: string;
+      nextId?: string;
+      dist: number; // constraint distance
+      angleLimit: number; // max turn angle per frame
+  };
 }
 
 export interface Particle extends Entity {

@@ -73,6 +73,14 @@ function handleEnemyDeath(s: GameState, e: Enemy, callbacks: GameCallbacks, impa
         }
     }
 
+    // Chain Death (Dragon)
+    if (e.chain && e.chain.nextId) {
+        const next = s.enemies.find(n => n.id === e.chain?.nextId);
+        if (next && next.active) {
+            handleEnemyDeath(s, next, callbacks, impactVel);
+        }
+    }
+
     if (isLarge || e.isElite) {
         s.hitStop = 4; 
         s.shake += 15;
@@ -183,27 +191,35 @@ function handleBulletEnemyCollision(s: GameState, b: Bullet, e: Enemy, callbacks
             return true;
         }
 
-        e.hp -= b.dmg;
-        e.hitFlash = 3;
+        // Damage Sharing for Dragon
+        let target = e;
+        if (e.chain && e.behavior === 'void_dragon_segment') {
+            // Find Head
+            // This traversal is slow O(N). Ideally Head has shared HP pool or we link directly to head.
+            // For now, simple HP reduction on segment.
+        }
+
+        target.hp -= b.dmg;
+        target.hitFlash = 3;
         s.damageDealtBuffer += b.dmg;
 
-        const kbScale = e.mass > 100 ? 0.05 : 1.0;
+        const kbScale = target.mass > 100 ? 0.05 : 1.0;
         const angle = Math.atan2(b.vy, b.vx);
         const kb = (b.knockback || 1) * 2; // Physics.applyImpulse divides by mass
 
-        Physics.applyImpulse(e, Math.cos(angle) * kb * kbScale, Math.sin(angle) * kb * kbScale);
+        Physics.applyImpulse(target, Math.cos(angle) * kb * kbScale, Math.sin(angle) * kb * kbScale);
 
-        if (!e.modules) createExplosion(s, b.x, b.y, e.color, 3, 0.5);
+        if (!target.modules) createExplosion(s, b.x, b.y, target.color, 3, 0.5);
 
         const isCrit = b.dmg > 20;
-        createFloatingText(s, e.x, e.y - 20, Math.floor(b.dmg).toString(), isCrit ? '#ff3333' : e.color, 14, isCrit);
+        createFloatingText(s, target.x, target.y - 20, Math.floor(b.dmg).toString(), isCrit ? '#ff3333' : target.color, 14, isCrit);
 
         if(b.elemental) {
-            if(b.elemental.fire > 0) e.status.push({ type: 'BURN', duration: 180, power: 5, timer: 0 });
-            if(b.elemental.ice > 0) e.status.push({ type: 'FREEZE', duration: 120, power: 0.3, timer: 0 });
+            if(b.elemental.fire > 0) target.status.push({ type: 'BURN', duration: 180, power: 5, timer: 0 });
+            if(b.elemental.ice > 0) target.status.push({ type: 'FREEZE', duration: 120, power: 0.3, timer: 0 });
         }
 
-        if (e.hp <= 0 && !e.dead) handleEnemyDeath(s, e, callbacks, {x: b.vx, y: b.vy});
+        if (target.hp <= 0 && !target.dead) handleEnemyDeath(s, target, callbacks, {x: b.vx, y: b.vy});
         return true;
     }
     return false;
@@ -424,7 +440,57 @@ const EnemiesSystem = {
             const speedMod = e.status.some(st => st.type === 'FREEZE') ? 0.5 : 1.0;
             const m = e.mass || 1.0;
 
-            if (e.type === 'snake_body' && e.parentId) {
+            // --- VOID DRAGON IK ---
+            if (e.chain) {
+                if (e.behavior === 'void_dragon') {
+                    // HEAD LOGIC: Sine-Wander + Pursuit
+                    const t = s.frame * 0.02;
+                    const wanderX = Math.cos(t) * 200;
+                    const wanderY = Math.sin(t * 0.7) * 200;
+
+                    const dx = (p.x + wanderX) - e.x;
+                    const dy = (p.y + wanderY) - e.y;
+                    const ang = Math.atan2(dy, dx);
+
+                    // Smooth turn
+                    const diff = Utils.angleDiff(e.rotation, ang);
+                    e.rotation += Math.max(-0.05, Math.min(0.05, diff));
+
+                    const thrust = e.speed * speedMod;
+                    e.vx += Math.cos(e.rotation) * thrust * 0.1 * s.worldTimeScale;
+                    e.vy += Math.sin(e.rotation) * thrust * 0.1 * s.worldTimeScale;
+
+                } else if (e.chain.prevId) {
+                    // SEGMENT LOGIC: Follow Previous
+                    const prev = s.enemies.find(n => n.id === e.chain?.prevId);
+                    if (prev && prev.active) {
+                        const dx = prev.x - e.x;
+                        const dy = prev.y - e.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        const constraint = e.chain.dist;
+
+                        if (dist > constraint) {
+                            // Constraint Solving (Pull towards parent)
+                            const k = (dist - constraint) / dist; // Tension
+                            const pullX = dx * k * 0.5; // Stiff spring
+                            const pullY = dy * k * 0.5;
+
+                            e.x += pullX;
+                            e.y += pullY;
+
+                            // Align rotation to parent
+                            e.rotation = Math.atan2(dy, dx);
+
+                            // Inherit velocity for smooth trails
+                            e.vx = Utils.lerp(e.vx, prev.vx, 0.5);
+                            e.vy = Utils.lerp(e.vy, prev.vy, 0.5);
+                        }
+                    } else {
+                        // Head dead, die
+                        handleEnemyDeath(s, e, callbacks, {x:0, y:0});
+                    }
+                }
+            } else if (e.type === 'snake_body' && e.parentId) {
                  const parent = s.enemies.find(par => par.id === e.parentId);
                  if (parent && parent.active) {
                      const dist = Utils.dist(e.x, e.y, parent.x, parent.y);
@@ -446,7 +512,7 @@ const EnemiesSystem = {
                     const ang = Math.atan2(p.y - e.y, p.x - e.x);
                     Physics.applyForce(e, Math.cos(ang) * 0.2 * m, Math.sin(ang) * 0.2 * m, 0.1 * s.worldTimeScale * speedMod);
                 }
-            } else if (e.type.startsWith('boss')) {
+            } else if (e.type.startsWith('boss') && !e.chain) {
                  const ang = Math.atan2(p.y - e.y, p.x - e.x);
                  Physics.applyForce(e, Math.cos(ang) * 0.5 * m, Math.sin(ang) * 0.5 * m, 0.1 * s.worldTimeScale * speedMod);
             }
@@ -460,9 +526,9 @@ const EnemiesSystem = {
             }
 
             // Rotation
-            if (e.type !== 'snake_body' && !e.type.startsWith('boss') && e.sides > 0) {
+            if (e.type !== 'snake_body' && !e.type.startsWith('boss') && e.sides > 0 && !e.chain) {
                  e.rotation += speed * 0.05 * s.worldTimeScale;
-            } else if (speed > 0.1) {
+            } else if (speed > 0.1 && !e.chain) {
                  e.rotation = Math.atan2(e.vy, e.vx);
             }
 
@@ -933,7 +999,7 @@ const PlayerSystem = {
             }
         }
 
-        const thrust = CONFIG.PLAYER.THRUST * p.stats.speedMod; // dt applied in applyForce
+        const thrust = CONFIG.PLAYER.THRUST * p.stats.speedMod;
         const len = Math.hypot(mx, my);
         if (len > 1) { mx /= len; my /= len; }
 

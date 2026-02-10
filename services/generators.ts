@@ -34,7 +34,7 @@ function getShape(type: keyof typeof SHAPES, variant: number): number[] {
 
 // --- BOSS ARCHITECT ENGINE ---
 
-type Archetype = 'BULWARK' | 'VECTOR' | 'HIVE';
+type Archetype = 'BULWARK' | 'VECTOR' | 'HIVE' | 'DRAGON';
 
 interface Blueprint {
     name: string;
@@ -42,6 +42,7 @@ interface Blueprint {
     color: string;
     modules: BossModule[];
     stats: { hpMult: number; speedMult: number; massMult: number };
+    chainLength?: number;
 }
 
 // Deterministic RNG for consistent boss generation per seed
@@ -186,20 +187,52 @@ function constructHive(rng: SeededRNG, wave: number): Blueprint {
     };
 }
 
-export function generateBossGeometry(wave: number): { modules: BossModule[], stats: { hpMult: number, speedMult: number, massMult: number } } {
-    const seed = wave * 739391 + Date.now(); // semi-random but seeded by wave mostly
+// New: Void Dragon Architect
+function constructVoidDragon(rng: SeededRNG, wave: number): Blueprint {
+    const modules: BossModule[] = [];
+
+    // Head Module
+    modules.push({
+        xOffset: 0, yOffset: 0, type: 'CORE', size: 50, color: '#ffffff',
+        rotation: 0, health: 1, maxHealth: 1, shape: getShape('CORE', 2)
+    });
+
+    // Mandibles
+    modules.push({
+        xOffset: 20, yOffset: 20, type: 'SPIKE', size: 20, color: '#ff00ff',
+        rotation: Math.PI/4, health: 1, maxHealth: 1, shape: getShape('WING', 2)
+    });
+    modules.push({
+        xOffset: 20, yOffset: -20, type: 'SPIKE', size: 20, color: '#ff00ff',
+        rotation: -Math.PI/4, health: 1, maxHealth: 1, shape: getShape('WING', 2)
+    });
+
+    return {
+        name: 'VOID-DRAGON',
+        coreShape: 2,
+        color: '#aa00ff',
+        modules,
+        stats: { hpMult: 1.5, speedMult: 1.2, massMult: 2.0 },
+        chainLength: 16 + Math.floor(wave / 2) // Grows with difficulty
+    };
+}
+
+export function generateBossGeometry(wave: number): { modules: BossModule[], stats: { hpMult: number, speedMult: number, massMult: number }, chainLength?: number } {
+    const seed = wave * 739391 + Date.now();
     const rng = new SeededRNG(seed);
     
     const roll = rng.next();
     let blueprint: Blueprint;
 
-    if (roll < 0.33) blueprint = constructBulwark(rng, wave);
-    else if (roll < 0.66) blueprint = constructVector(rng, wave);
-    else blueprint = constructHive(rng, wave);
+    if (roll < 0.25) blueprint = constructBulwark(rng, wave);
+    else if (roll < 0.50) blueprint = constructVector(rng, wave);
+    else if (roll < 0.75) blueprint = constructHive(rng, wave);
+    else blueprint = constructVoidDragon(rng, wave);
 
     return {
         modules: blueprint.modules,
-        stats: blueprint.stats
+        stats: blueprint.stats,
+        chainLength: blueprint.chainLength
     };
 }
 
@@ -330,6 +363,7 @@ export function setupEnemy(s: GameState, e: Enemy, type: string, x: number, y: n
     e.active = true; e.trail = []; e.state = 'idle'; e.stateTimer = 0; 
     e.squadId = undefined; e.squadRole = undefined;
     e.modules = undefined;
+    e.chain = undefined;
 
     const isElite = Math.random() < Math.min(CONFIG.ELITE.MAX_CHANCE, CONFIG.ELITE.CHANCE_PER_WAVE * s.wave);
     if (isElite && !type.startsWith('BOSS')) {
@@ -357,6 +391,60 @@ export function setupEnemy(s: GameState, e: Enemy, type: string, x: number, y: n
         e.mass = 5000 * gen.stats.massMult;
         e.size = 80; // Collision approximation
         e.color = e.modules[0].color; // Core color
+
+        // --- VOID DRAGON SPAWNING ---
+        if (gen.chainLength) {
+            e.type = 'boss_dragon_head';
+            e.behavior = 'void_dragon';
+
+            // Spawn Segments
+            let prevId = e.id;
+            let prevR = e.size;
+
+            for (let i=0; i < gen.chainLength; i++) {
+                const seg = s.pools.enemies.acquire();
+                if (seg) {
+                    const isTail = i === gen.chainLength - 1;
+                    seg.id = Utils.uid('seg');
+                    seg.x = x - (i+1) * 40;
+                    seg.y = y;
+                    seg.type = isTail ? 'boss_dragon_tail' : 'boss_dragon_body';
+                    seg.hp = e.hp * 0.5; // Segments share damage pool logic usually, but here separate hp
+                    seg.maxHp = seg.hp;
+                    seg.speed = e.speed;
+                    seg.size = Math.max(20, e.size * (1 - i/gen.chainLength) * 0.8);
+                    seg.color = e.color;
+                    seg.mass = e.mass * 0.1;
+                    seg.behavior = 'void_dragon_segment';
+                    seg.active = true;
+
+                    // Chain Link
+                    seg.chain = {
+                        prevId: prevId,
+                        nextId: undefined,
+                        dist: prevR + seg.size + 5, // Constraint
+                        angleLimit: 0.5
+                    };
+
+                    // Update Previous Next Link
+                    if (i === 0) {
+                        // Head points to first segment? Usually head pulls.
+                        // We store nextId on head to pull?
+                        // Actually, segments follow prevId.
+                        // Head doesn't strictly need nextId unless we do forward kinematics.
+                        // Let's store it for completeness.
+                        e.chain = { nextId: seg.id, dist: 0, angleLimit: 0 };
+                    } else {
+                        const prevSeg = s.enemies.find(en => en.id === prevId);
+                        if (prevSeg && prevSeg.chain) prevSeg.chain.nextId = seg.id;
+                    }
+
+                    prevId = seg.id;
+                    prevR = seg.size;
+                    s.enemies.push(seg);
+                }
+            }
+        }
     }
 
     s.enemies.push(e);
