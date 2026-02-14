@@ -5,7 +5,19 @@ export const Utils = {
   clamp: (v: number, min: number, max: number) => Math.max(min, Math.min(max, v)),
   normalizeAngle: (a: number) => { while (a <= -Math.PI) a += Math.PI * 2; while (a > Math.PI) a -= Math.PI * 2; return a; },
   angleDiff: (from: number, to: number) => Utils.normalizeAngle(to - from),
-  uid: (prefix = 'e') => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  uid: (prefix = 'e') => {
+    let randomPart: string;
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      randomPart = crypto.randomUUID();
+    } else if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const array = new Uint32Array(4);
+      crypto.getRandomValues(array);
+      randomPart = Array.from(array).map(n => n.toString(36)).join('');
+    } else {
+      randomPart = Math.random().toString(36).substring(2, 11);
+    }
+    return `${prefix}_${Date.now()}_${randomPart}`;
+  },
   inBounds: (x: number, y: number, w: number, h: number, pad = 50) => x >= -pad && x <= w + pad && y >= -pad && y <= h + pad,
   getSpawnPos: (w: number, h: number, offset = 100) => {
     const angle = Math.random() * Math.PI * 2;
