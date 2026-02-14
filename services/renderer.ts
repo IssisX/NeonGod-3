@@ -320,6 +320,36 @@ export function renderGame(ctx: CanvasRenderingContext2D, distCtx: CanvasRenderi
             ctx.fillStyle = e.hitFlash > 0 ? '#fff' : '#000';
             ctx.beginPath(); ctx.arc(0,0, 15, 0, Math.PI*2); ctx.fill();
             ctx.strokeStyle = e.color; ctx.lineWidth = 2; ctx.stroke();
+        } else if (e.type === 'snake_body') {
+            // VOID DRAGON SEGMENT
+            ctx.rotate(e.rotation);
+            // Draw link to parent? Done by position, maybe draw a 'tendril' backwards?
+            // Actually, we are translated to e.x, e.y.
+            // Drawing the segment itself:
+            const pulse = 1.0 + Math.sin(s.frame * 0.1 + (e.segmentIndex||0)) * 0.2;
+
+            ctx.shadowColor = e.color;
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : '#000';
+            ctx.strokeStyle = e.color;
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            // Hexagon shape for void scales
+            for(let k=0; k<6; k++) {
+                const ang = k * Math.PI / 3;
+                const r = e.size * pulse;
+                ctx.lineTo(Math.cos(ang)*r, Math.sin(ang)*r);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Inner Core
+            ctx.fillStyle = e.color;
+            ctx.beginPath(); ctx.arc(0, 0, e.size * 0.4, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+
         } else {
             // STANDARD
             let rot = Math.atan2(e.vy, e.vx);

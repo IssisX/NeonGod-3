@@ -276,7 +276,7 @@ export function createAsteroid(s: GameState, x: number, y: number, size: number)
         d.vx = (Math.random() - 0.5) * 0.5;
         d.vy = (Math.random() - 0.5) * 0.5;
         d.size = size;
-        d.type = 'asteroid';
+        d.type = 'asteroid'; // Type assignment
         d.color = '#556677';
         d.rotation = Math.random() * Math.PI * 2;
         d.vRot = (Math.random() - 0.5) * 0.02;
@@ -300,7 +300,7 @@ export function createShipDebris(s: GameState, x: number, y: number, color: stri
         d.vx = ivx * 0.5 + Math.cos(angle) * force;
         d.vy = ivy * 0.5 + Math.sin(angle) * force;
         d.size = size;
-        d.type = 'scrap';
+        d.type = 'scrap'; // Type assignment
         d.color = color;
         d.rotation = Math.random() * Math.PI * 2;
         d.vRot = (Math.random() - 0.5) * 0.2;
