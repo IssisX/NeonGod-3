@@ -1,6 +1,6 @@
 
 
-import { GameState, Enemy, GameCallbacks, BossModule, Player } from '../types';
+import { GameState, Enemy, GameCallbacks, BossModule, Player, Debris } from '../types';
 import { CONFIG } from '../constants';
 import { Utils } from '../utils';
 import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawnBoss, createAsteroid, createShipDebris, createSparks } from './generators';
@@ -587,6 +587,8 @@ const CleanupSystem = {
         for(let i = s.debris.length - 1; i >= 0; i--) {
             const d = s.debris[i];
             
+            if (!d.active) { s.pools.debris.release(d); s.debris.splice(i, 1); continue; }
+
             // Angular Physics
             d.rotation += d.vRot * s.worldTimeScale;
             d.vRot *= d.friction; // Angular damping
@@ -910,8 +912,11 @@ export const Systems = {
                 let hitEnemy = false;
                 
                 // DEBRIS / ASTEROID COLLISION (Rigid Body Physics)
-                for (let i = s.debris.length - 1; i >= 0; i--) {
-                    const d = s.debris[i];
+                for (const entity of candidates) {
+                    // Check if it's Debris (has vRot property)
+                    const d = entity as Debris;
+                    if (d.vRot === undefined) continue;
+
                     if (!d.active) continue;
                     
                     const dist = Utils.dist(b.x, b.y, d.x, d.y);
@@ -967,8 +972,7 @@ export const Systems = {
                                     createAsteroid(s, d.x + Utils.rand(-10, 10), d.y + Utils.rand(-10, 10), d.size * 0.6);
                                 }
                             }
-                            s.pools.debris.release(d); 
-                            s.debris.splice(i, 1);
+                            // Deferred removal via CleanupSystem to avoid splicing O(N) here
                         }
                         
                         if (b.pierce <= 0) hitEnemy = true; else b.pierce--;
@@ -978,6 +982,9 @@ export const Systems = {
 
                 if (!hitEnemy) {
                     for (const e of candidates) {
+                        // Skip Debris in this pass
+                        if ((e as any).vRot !== undefined) continue;
+
                         if (!e.active || e.dead || e.type === 'projectile') continue;
                         
                         let collision = false;

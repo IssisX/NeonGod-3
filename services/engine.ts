@@ -27,6 +27,9 @@ export function updateGame(s: GameState, callbacks: GameCallbacks) {
     for (const e of s.enemies) {
         if (e.active) s.spatialGrid.insert(e);
     }
+    for (const d of s.debris) {
+        if (d.active) s.spatialGrid.insert(d);
+    }
 
     Systems.Wave.update(s, callbacks);
     Systems.Player.update(s, callbacks);
