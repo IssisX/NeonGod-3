@@ -1,9 +1,10 @@
 
 
-import { GameState, Enemy, GameCallbacks, BossModule, Player } from '../types';
+import { GameState, Enemy, GameCallbacks, BossModule, Player, Debris } from '../types';
 import { CONFIG } from '../constants';
 import { Utils } from '../utils';
 import { createExplosion, createShockwave, createFloatingText, setupEnemy, spawnBoss, createAsteroid, createShipDebris, createSparks } from './generators';
+import { Verlet } from './physics_verlet';
 
 // --- MATH HELPERS ---
 
@@ -473,18 +474,15 @@ const EnemiesSystem = {
                  fx = Math.cos(ang) * 0.5; fy = Math.sin(ang) * 0.5;
             }
 
-            // Snake Body Logic
+            // Snake Body Logic (Verlet Integration)
             if (e.type === 'snake_body' && e.parentId) {
                  const parent = s.enemies.find(par => par.id === e.parentId);
                  if (parent && parent.active) {
-                     const dist = Utils.dist(e.x, e.y, parent.x, parent.y);
-                     if (dist > e.size) {
-                         const ang = Math.atan2(parent.y - e.y, parent.x - e.x);
-                         const speed = Math.hypot(parent.vx, parent.vy); // Follow parent speed
-                         e.x = Utils.lerp(e.x, parent.x - Math.cos(ang) * e.size, 0.2);
-                         e.y = Utils.lerp(e.y, parent.y - Math.sin(ang) * e.size, 0.2);
-                         fx = 0; fy = 0;
-                     }
+                     // Verlet constraint (One-Way) to prevent head drag
+                     Verlet.resolveDistanceOneWay(parent, e, e.size * 1.1, 0.8);
+                     // Kill velocity to prevent drift after constraint resolve
+                     e.vx *= 0.1; e.vy *= 0.1;
+                     fx = 0; fy = 0;
                  } else {
                      e.hp = 0; e.dead = true; // Cascade death
                      handleEnemyDeath(s, e, callbacks, {x:0, y:0});
@@ -587,6 +585,8 @@ const CleanupSystem = {
         for(let i = s.debris.length - 1; i >= 0; i--) {
             const d = s.debris[i];
             
+            if (!d.active) { s.pools.debris.release(d); s.debris.splice(i, 1); continue; }
+
             // Angular Physics
             d.rotation += d.vRot * s.worldTimeScale;
             d.vRot *= d.friction; // Angular damping
@@ -906,12 +906,17 @@ export const Systems = {
                 if (b.life <= 0 || !Utils.inBounds(b.x, b.y, s.worldWidth, s.worldHeight, 200)) { s.pools.bullets.release(b); s.bullets.splice(bi, 1); continue; }
 
                 // Hit Detection
+                // const candidates was previously defined inside the enemy block, leading to ReferenceError here.
+                // We must define it before the debris loop.
                 const candidates = s.spatialGrid.queryRadius(b.x, b.y, 100); 
                 let hitEnemy = false;
                 
                 // DEBRIS / ASTEROID COLLISION (Rigid Body Physics)
-                for (let i = s.debris.length - 1; i >= 0; i--) {
-                    const d = s.debris[i];
+                for (const entity of candidates) {
+                    // Check if it's Debris
+                    if ((entity as any).type !== 'asteroid' && (entity as any).type !== 'scrap') continue;
+                    const d = entity as Debris;
+
                     if (!d.active) continue;
                     
                     const dist = Utils.dist(b.x, b.y, d.x, d.y);
@@ -958,7 +963,7 @@ export const Systems = {
                         createFloatingText(s, b.x, b.y, Math.floor(b.dmg).toString(), '#aaaaaa', 10);
 
                         if (d.health <= 0) { 
-                            d.active = false; 
+                            d.active = false; // Flag for cleanup
                             createExplosion(s, d.x, d.y, '#777777', 8, 1);
                             s.score += 10;
                             // Splitting Logic
@@ -967,8 +972,7 @@ export const Systems = {
                                     createAsteroid(s, d.x + Utils.rand(-10, 10), d.y + Utils.rand(-10, 10), d.size * 0.6);
                                 }
                             }
-                            s.pools.debris.release(d); 
-                            s.debris.splice(i, 1);
+                            // Deferred removal via CleanupSystem to avoid splicing O(N) here
                         }
                         
                         if (b.pierce <= 0) hitEnemy = true; else b.pierce--;
@@ -978,6 +982,9 @@ export const Systems = {
 
                 if (!hitEnemy) {
                     for (const e of candidates) {
+                        // Skip Debris in this pass
+                        if (e.type === 'asteroid' || e.type === 'scrap') continue;
+
                         if (!e.active || e.dead || e.type === 'projectile') continue;
                         
                         let collision = false;
