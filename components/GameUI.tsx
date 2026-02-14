@@ -12,12 +12,56 @@ interface GameUIProps {
   onSkill: (skill: string) => void;
 }
 
-export const GameUI: React.FC<GameUIProps> = ({ ui, onStart, onUpgradeSelect, onToggleAutoMode, onHullSelect, onSkill }) => {
-  const bindAction = (action: () => void) => ({
-      onClick: (e: React.MouseEvent) => { e.stopPropagation(); action(); },
-      onTouchEnd: (e: React.TouchEvent) => { e.preventDefault(); e.stopPropagation(); action(); }
-  });
+const bindAction = (action: () => void) => ({
+    onClick: (e: React.MouseEvent) => { e.stopPropagation(); action(); },
+    onTouchEnd: (e: React.TouchEvent) => { e.preventDefault(); e.stopPropagation(); action(); }
+});
 
+interface SkillKeyProps {
+    k: string;
+    label: string;
+    cd: number;
+    max: number;
+    active: boolean;
+    color: 'cyan' | 'fuchsia' | 'white' | 'emerald';
+    onClick: () => void;
+    size?: 'normal' | 'large';
+}
+
+const SkillKey: React.FC<SkillKeyProps> = ({ k, label, cd, max, active, color, onClick, size = 'normal' }) => {
+    const ready = cd <= 0;
+    const progress = ready ? 100 : ((max - cd) / max) * 100;
+
+    const colors = {
+        cyan: { border: 'border-cyan-400', text: 'text-cyan-400', shadow: 'shadow-[0_0_20px_rgba(34,211,238,0.4)]', bg: 'bg-cyan-950/80' },
+        fuchsia: { border: 'border-fuchsia-500', text: 'text-fuchsia-400', shadow: 'shadow-[0_0_20px_rgba(217,70,239,0.4)]', bg: 'bg-fuchsia-950/80' },
+        white: { border: 'border-white', text: 'text-white', shadow: 'shadow-[0_0_20px_rgba(255,255,255,0.4)]', bg: 'bg-gray-800/80' },
+        emerald: { border: 'border-emerald-400', text: 'text-emerald-400', shadow: 'shadow-[0_0_20px_rgba(52,211,153,0.4)]', bg: 'bg-emerald-950/80' }
+    };
+    const c = colors[color];
+
+    const dims = size === 'large' ? 'w-24 h-24 rounded-3xl' : 'w-16 h-16 rounded-xl';
+    const txtSize = size === 'large' ? 'text-3xl' : 'text-xl';
+
+    return (
+        <button
+            {...bindAction(onClick)}
+            className={`relative ${dims} border-2 backdrop-blur-md flex flex-col items-center justify-center transition-all active:scale-90 pointer-events-auto overflow-hidden ${ready ? `${c.border} ${c.bg} ${c.shadow}` : 'border-gray-800 bg-black/60 opacity-60'}`}
+        >
+            <div className={`${txtSize} font-black z-10 ${ready ? 'text-white' : 'text-gray-500'}`}>{k}</div>
+            {size === 'large' && <div className={`text-[10px] font-bold uppercase tracking-widest z-10 ${ready ? c.text : 'text-gray-600'}`}>{label}</div>}
+
+            {!ready && (
+                <div className="absolute bottom-0 left-0 h-1 bg-white/50 w-full">
+                    <div className="h-full bg-white" style={{ width: `${progress}%` }}></div>
+                </div>
+            )}
+            {active && <div className="absolute inset-0 bg-white/30 animate-ping"></div>}
+        </button>
+    );
+};
+
+export const GameUI: React.FC<GameUIProps> = ({ ui, onStart, onUpgradeSelect, onToggleAutoMode, onHullSelect, onSkill }) => {
   // --- SCREENS (BOOT / START / GAME OVER / LEVEL UP) ---
 
   if (ui.screen === 'boot') {
@@ -146,40 +190,6 @@ export const GameUI: React.FC<GameUIProps> = ({ ui, onStart, onUpgradeSelect, on
   }
 
   // --- PLAYING HUD ---
-
-  const SkillKey = ({ k, label, cd, max, active, color, onClick, size = 'normal' }: any) => {
-      const ready = cd <= 0;
-      const progress = ready ? 100 : ((max - cd) / max) * 100;
-      
-      const colors = {
-          cyan: { border: 'border-cyan-400', text: 'text-cyan-400', shadow: 'shadow-[0_0_20px_rgba(34,211,238,0.4)]', bg: 'bg-cyan-950/80' },
-          fuchsia: { border: 'border-fuchsia-500', text: 'text-fuchsia-400', shadow: 'shadow-[0_0_20px_rgba(217,70,239,0.4)]', bg: 'bg-fuchsia-950/80' },
-          white: { border: 'border-white', text: 'text-white', shadow: 'shadow-[0_0_20px_rgba(255,255,255,0.4)]', bg: 'bg-gray-800/80' },
-          emerald: { border: 'border-emerald-400', text: 'text-emerald-400', shadow: 'shadow-[0_0_20px_rgba(52,211,153,0.4)]', bg: 'bg-emerald-950/80' }
-      };
-      const c = colors[color as keyof typeof colors];
-      
-      // Sizes
-      const dims = size === 'large' ? 'w-24 h-24 rounded-3xl' : 'w-16 h-16 rounded-xl';
-      const txtSize = size === 'large' ? 'text-3xl' : 'text-xl';
-
-      return (
-          <button
-              {...bindAction(onClick)}
-              className={`relative ${dims} border-2 backdrop-blur-md flex flex-col items-center justify-center transition-all active:scale-90 pointer-events-auto overflow-hidden ${ready ? `${c.border} ${c.bg} ${c.shadow}` : 'border-gray-800 bg-black/60 opacity-60'}`}
-          >
-              <div className={`${txtSize} font-black z-10 ${ready ? 'text-white' : 'text-gray-500'}`}>{k}</div>
-              {size === 'large' && <div className={`text-[10px] font-bold uppercase tracking-widest z-10 ${ready ? c.text : 'text-gray-600'}`}>{label}</div>}
-              
-              {!ready && (
-                  <div className="absolute bottom-0 left-0 h-1 bg-white/50 w-full">
-                      <div className="h-full bg-white" style={{ width: `${progress}%` }}></div>
-                  </div>
-              )}
-              {active && <div className="absolute inset-0 bg-white/30 animate-ping"></div>}
-          </button>
-      );
-  };
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-[60] text-white">
